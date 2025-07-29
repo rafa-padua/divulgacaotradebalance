@@ -1,0 +1,3159 @@
+---
+title: "U.S. Trade Balance Report"
+author: "BOCOM BBM"
+date: "Last print: May 2025"
+output:
+  html_document:
+    theme: cosmo
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: true
+    toc_depth: 3
+    number_sections: true
+    code_folding: hide
+    fig_width: 10
+    fig_height: 6
+    df_print: paged
+  pdf_document:
+    toc: true
+    toc_depth: '3'
+---
+
+<center>
+
+```{r logo, echo=FALSE, out.width='100%'}
+knitr::include_graphics("/Users/rafaelpadua/logo_banco.png")
+```
+
+</center>
+
+<br>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE, 
+  warning = FALSE, 
+  message = FALSE, 
+  fig.align = 'center',
+  out.width = '100%'
+)
+knitr::opts_knit$set(root.dir = here::here())
+
+# Load required libraries
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(plotly)
+library(knitr)
+library(kableExtra)
+library(zoo)
+library(scales)
+```
+
+```{r load_data}
+# Load all data files
+data_long <- readRDS("/Users/rafaelpadua/country_trade_data.rds")
+totals <- readRDS("/Users/rafaelpadua/trade_totals.rds")
+petro_data <- readRDS("/Users/rafaelpadua/petroleum_trade_data.rds")
+final_data <- readRDS("/Users/rafaelpadua/goods_services_trade_data.rds")
+bocom_pal <- readRDS("/Users/rafaelpadua/bocom_palette.rds")
+full_data <- readRDS("/Users/rafaelpadua/us_trade_hs4_data.rds")
+hs_categories <- readRDS("/Users/rafaelpadua/hs_categories.rds")
+countries_products_exp <- readRDS("/Users/rafaelpadua/three_countries_hs2_exports.rds")
+countries_products_imp <- readRDS("/Users/rafaelpadua/three_countries_hs2_imports.rds")
+products_countries <- readRDS("/Users/rafaelpadua/specific_hs_codes_by_country.rds")
+```
+
+
+# Overall Trade Balance
+
+## Trade Balance with Exports and Imports {.tabset}
+
+### Overview
+
+```{r trade_balance_prep}
+# Prepare data for plotting
+plot_data <- final_data %>%
+  mutate(Date = ym(Date)) %>%
+  filter(!is.na(Balance_Total) & !is.na(Exports_Total) & !is.na(Imports_Total))
+
+# Get last 20 years of data
+max_date <- max(plot_data$Date)
+min_date <- 1992
+recent_data <- plot_data %>%
+  filter(Date >= min_date)
+
+# Convert to billions
+recent_data_billions <- recent_data %>%
+  mutate(
+    Balance_Total_B = Balance_Total / 1000,
+    Balance_Goods_B = Balance_Goods / 1000,
+    Balance_Services_B = Balance_Services / 1000,
+    Exports_Total_B = Exports_Total / 1000,
+    Imports_Total_B = Imports_Total / 1000
+  )
+```
+
+```{r trade_balance_plot, fig.cap="U.S. Trade Balance showing exports, imports, and the trade deficit"}
+p1 <- plot_ly(recent_data_billions, x = ~Date) %>%
+  add_trace(
+    y = ~Exports_Total_B,
+    type = 'scatter', mode = 'lines',
+    line = list(color = unname(bocom_pal["tech_blue"]), width = 2),
+    name = 'Exports',
+    hovertemplate = 'Exports: $%{y:.1f}B<extra></extra>'
+  ) %>%
+  add_trace(
+    y = ~Imports_Total_B,
+    type = 'scatter', mode = 'lines',
+    line = list(color = unname(bocom_pal["BOCOM_red"]), width = 2),
+    name = 'Imports',
+    hovertemplate = 'Imports: $%{y:.1f}B<extra></extra>'
+  ) %>%
+  add_trace(
+    y = ~(-Balance_Total_B),
+    type = 'bar',
+    marker = list(
+      color = unname(bocom_pal["table_border"]),
+      line = list(width = 0)
+    ),
+    name = 'Deficit (rhs)',
+    hovertemplate = 'Trade Deficit: $%{y:.1f}B<extra></extra>',
+    yaxis = 'y2'
+  ) %>%
+  layout(
+    title = list(
+      text = "U.S. Trade Balance (Census Basis)",
+      font = list(size = 20),
+      x = 0.5,
+      xanchor = "center",
+      y = 0.95,
+      yanchor = "top"
+    ),
+    legend = list(
+      orientation = "h",
+      x = 0.5,
+      xanchor = "center",
+      y = 1.02,
+      yanchor = "bottom"
+    ),
+    margin = list(l = 80, r = 80, t = 120, b = 80, pad = 4),
+    xaxis = list(
+      title = "Source: U.S. Census Bureau",
+      showgrid = TRUE,
+      gridcolor = 'rgba(0,0,0,0.1)',
+      titlefont = list(size = 14),
+      tickfont = list(size = 12)
+    ),
+    yaxis = list(
+      title = "Balance in Billions of Dollars (Seasonally Adjusted)",
+      tickformat = ".0f",
+      showgrid = TRUE,
+      gridcolor = 'rgba(0,0,0,0.1)',
+      zeroline = FALSE,
+      side = 'left',
+      rangemode = "tozero",
+      titlefont = list(size = 14),
+      tickfont = list(size = 12)
+    ),
+    yaxis2 = list(
+      title = "Balance (rhs)",
+      tickmode = "array",
+      tickvals = c(0, 20, 40, 60, 80, 100, 120, 140, 160),
+      ticktext = c("0", "20", "40", "60", "80", "100", "120", "140", "160"),
+      overlaying = 'y',
+      side = 'right',
+      showgrid = FALSE,
+      zeroline = TRUE,
+      range = c(0, 180),
+      rangemode = "tozero",
+      titlefont = list(size = 14),
+      tickfont = list(size = 12),
+      tickformat = "$,.0f",
+      ticksuffix = "B"
+    ),
+    hovermode = 'x unified',
+    barmode = 'relative'
+  )
+
+p1
+```
+### 12-Month Rolling Sum
+
+```{r trade_balance_12mo}
+# 12-month accumulated trade balance
+recent_data_billions_12mo <- recent_data_billions %>%
+  arrange(Date) %>%
+  mutate(
+    Exports_Total_B_12mo = rollapply(Exports_Total_B, width = 12, FUN = sum, align = "right", fill = NA),
+    Imports_Total_B_12mo = rollapply(Imports_Total_B, width = 12, FUN = sum, align = "right", fill = NA),
+    Balance_Total_B_12mo = rollapply(Balance_Total_B, width = 12, FUN = sum, align = "right", fill = NA)
+  ) %>%
+  filter(!is.na(Exports_Total_B_12mo))
+
+p16 <- plot_ly(recent_data_billions_12mo, x = ~Date) %>%
+  add_trace(
+    y = ~Exports_Total_B_12mo,
+    type = 'scatter', mode = 'lines',
+    line = list(color = unname(bocom_pal["tech_blue"]), width = 2),
+    name = 'Exports (12mo)',
+    hovertemplate = 'Exports (12mo): $%{y:.1f}B<extra></extra>'
+  ) %>%
+  add_trace(
+    y = ~Imports_Total_B_12mo,
+    type = 'scatter', mode = 'lines',
+    line = list(color = unname(bocom_pal["BOCOM_red"]), width = 2),
+    name = 'Imports (12mo)',
+    hovertemplate = 'Imports (12mo): $%{y:.1f}B<extra></extra>'
+  ) %>%
+  add_trace(
+    y = ~(-Balance_Total_B_12mo),
+    type = 'bar',
+    marker = list(color = unname(bocom_pal["table_border"]), line = list(width = 0)),
+    name = 'Deficit (rhs)',
+    hovertemplate = 'Trade Deficit (12mo): $%{y:.1f}B<extra></extra>',
+    yaxis = 'y2'
+  ) %>%
+  layout(
+    title = list(text = "U.S. Trade Balance - 12 Month Rolling Sum",
+                 font = list(size = 20), x = 0.5, xanchor = "center", y = 0.95, yanchor = "top"),
+    legend = list(orientation = "h", x = 0.5, xanchor = "center", y = 1.02, yanchor = "bottom"),
+    margin = list(l = 80, r = 80, t = 120, b = 80, pad = 4),
+    xaxis = list(
+      title = "Source: U.S. Census Bureau", 
+      showgrid = TRUE, 
+      gridcolor = 'rgba(0,0,0,0.1)',
+      titlefont = list(size = 14), 
+      tickfont = list(size = 12)
+      # Removed tickformat = "%Y" and dtick = "M12" to allow default monthly display
+    ),
+    yaxis = list(title = "Billions of Dollars (12-month acc., SA)",
+                 tickformat = ".0f", showgrid = TRUE, gridcolor = 'rgba(0,0,0,0.1)',
+                 zeroline = FALSE, side = 'left', rangemode = "tozero",
+                 titlefont = list(size = 14), tickfont = list(size = 12)),
+    yaxis2 = list(title = "Balance (12 mo acc., rhs)",
+                  tickmode = "array",
+                  tickvals = c(0, 200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000),
+                  ticktext = c("0", "200", "400", "600", "800", "1000", "1200", "1400", "1600", "1800", "2000"),
+                  overlaying = 'y', side = 'right', showgrid = FALSE, zeroline = TRUE,
+                  range = c(0, 2000), rangemode = "tozero",
+                  titlefont = list(size = 14), tickfont = list(size = 12)),
+    hovermode = 'x unified', barmode = 'relative'
+  )
+
+p16
+```
+
+
+### YoY Change 
+
+```{r trade_balance_yoy_plot, fig.cap="U.S. Trade Balance YoY Changes showing exports, imports, and trade deficit growth rates"}
+# Calculate YoY changes
+recent_data_yoy <- recent_data_billions %>%
+  arrange(Date) %>%
+  mutate(
+    Exports_YoY = (Exports_Total_B / lag(Exports_Total_B, 12) - 1) * 100,
+    Imports_YoY = (Imports_Total_B / lag(Imports_Total_B, 12) - 1) * 100,
+    Trade_Balance_YoY = ((Balance_Total_B) / lag(Balance_Total_B, 12) - 1) * 100
+  ) %>%
+  filter(!is.na(Exports_YoY))  # Remove first 12 months with NA values
+
+p2 <- plot_ly(recent_data_yoy, x = ~Date) %>%
+  add_trace(
+    y = ~Exports_YoY,
+    type = 'scatter', mode = 'lines',
+    line = list(color = unname(bocom_pal["tech_blue"]), width = 2),
+    name = 'Exports YoY',
+    hovertemplate = 'Exports YoY: %{y:.1f}%'
+  ) %>%
+  add_trace(
+    y = ~Imports_YoY,
+    type = 'scatter', mode = 'lines',
+    line = list(color = unname(bocom_pal["BOCOM_red"]), width = 2),
+    name = 'Imports YoY',
+    hovertemplate = 'Imports YoY: %{y:.1f}%'
+  ) %>%
+  add_trace(
+    y = ~Trade_Balance_YoY,
+    type = 'bar',
+    marker = list(
+      color = unname(bocom_pal["table_border"]),
+      line = list(width = 0)
+    ),
+    name = 'Balance YoY (rhs)',
+    hovertemplate = 'Trade Balance YoY: %{y:.1f}%',
+    yaxis = 'y2'
+  ) %>%
+  layout(
+    title = list(
+      text = "U.S. Trade Balance YoY Changes (Census Basis)",
+      font = list(size = 20),
+      x = 0.5,
+      xanchor = "center",
+      y = 0.95,
+      yanchor = "top"
+    ),
+    legend = list(
+      orientation = "h",
+      x = 0.5,
+      xanchor = "center",
+      y = 1.02,
+      yanchor = "bottom"
+    ),
+    margin = list(l = 80, r = 80, t = 120, b = 80, pad = 4),
+    xaxis = list(
+      title = "Source: U.S. Census Bureau",
+      showgrid = TRUE,
+      gridcolor = 'rgba(0,0,0,0.1)',
+      titlefont = list(size = 14),
+      tickfont = list(size = 12)
+    ),
+    yaxis = list(
+      title = "YoY Change (%)",
+      tickformat = ".1f",
+      showgrid = TRUE,
+      gridcolor = 'rgba(0,0,0,0.1)',
+      zeroline = TRUE,
+      zerolinecolor = 'rgba(0,0,0,0.3)',
+      zerolinewidth = 1,
+      side = 'left',
+      titlefont = list(size = 14),
+      tickfont = list(size = 12),
+      ticksuffix = "%"
+    ),
+    yaxis2 = list(
+      title = "Balance YoY Change (rhs)",
+      overlaying = 'y',
+      side = 'right',
+      showgrid = FALSE,
+      zeroline = TRUE,
+      zerolinecolor = 'rgba(0,0,0,0.3)',
+      zerolinewidth = 1,
+      titlefont = list(size = 14),
+      tickfont = list(size = 12),
+      tickformat = ".1f",
+      ticksuffix = "%"
+    ),
+    hovermode = 'x unified',
+    barmode = 'relative'
+  )
+
+p2
+```
+### 3MMA
+```{r trade_balance_3mma_plot, fig.cap="U.S. Trade Balance 3-Month Moving Averages showing exports, imports, and the trade deficit"}
+# Calculate 3-month moving averages
+recent_data_3mma <- recent_data_billions %>%
+  arrange(Date) %>%
+  mutate(
+    Exports_3MMA = zoo::rollmean(Exports_Total_B, k = 3, fill = NA, align = "right"),
+    Imports_3MMA = zoo::rollmean(Imports_Total_B, k = 3, fill = NA, align = "right"),
+    Balance_3MMA = zoo::rollmean(Balance_Total_B, k = 3, fill = NA, align = "right")
+  ) %>%
+  filter(!is.na(Exports_3MMA))  # Remove first 2 months with NA values
+
+p3 <- plot_ly(recent_data_3mma, x = ~Date) %>%
+  add_trace(
+    y = ~Exports_3MMA,
+    type = 'scatter', mode = 'lines',
+    line = list(color = unname(bocom_pal["tech_blue"]), width = 2),
+    name = 'Exports',
+    hovertemplate = 'Exports: $%{y:.1f}B'
+  ) %>%
+  add_trace(
+    y = ~Imports_3MMA,
+    type = 'scatter', mode = 'lines',
+    line = list(color = unname(bocom_pal["BOCOM_red"]), width = 2),
+    name = 'Imports',
+    hovertemplate = 'Imports: $%{y:.1f}B'
+  ) %>%
+  add_trace(
+    y = ~(-Balance_3MMA),
+    type = 'bar',
+    marker = list(
+      color = unname(bocom_pal["table_border"]),
+      line = list(width = 0)
+    ),
+    name = 'Deficit (rhs)',
+    hovertemplate = 'Trade Deficit: $%{y:.1f}B',
+    yaxis = 'y2'
+  ) %>%
+  layout(
+    title = list(
+      text = "U.S. Trade Balance 3MMA (Census Basis)",
+      font = list(size = 20),
+      x = 0.5,
+      xanchor = "center",
+      y = 0.95,
+      yanchor = "top"
+    ),
+    legend = list(
+      orientation = "h",
+      x = 0.5,
+      xanchor = "center",
+      y = 1.02,
+      yanchor = "bottom"
+    ),
+    margin = list(l = 80, r = 80, t = 120, b = 80, pad = 4),
+    xaxis = list(
+      title = "Source: U.S. Census Bureau",
+      showgrid = TRUE,
+      gridcolor = 'rgba(0,0,0,0.1)',
+      titlefont = list(size = 14),
+      tickfont = list(size = 12)
+    ),
+    yaxis = list(
+      title = "Balance in Billions of Dollars (3MMA, Seasonally Adjusted)",
+      tickformat = ".0f",
+      showgrid = TRUE,
+      gridcolor = 'rgba(0,0,0,0.1)',
+      zeroline = FALSE,
+      side = 'left',
+      rangemode = "tozero",
+      titlefont = list(size = 14),
+      tickfont = list(size = 12)
+    ),
+    yaxis2 = list(
+      title = "Balance (rhs)",
+      tickmode = "array",
+      tickvals = c(0, 20, 40, 60, 80, 100, 120, 140, 160),
+      ticktext = c("0", "20", "40", "60", "80", "100", "120", "140", "160"),
+      overlaying = 'y',
+      side = 'right',
+      showgrid = FALSE,
+      zeroline = TRUE,
+      range = c(0, 180),
+      rangemode = "tozero",
+      titlefont = list(size = 14),
+      tickfont = list(size = 12),
+      tickformat = "$,.0f",
+      ticksuffix = "B"
+    ),
+    hovermode = 'x unified',
+    barmode = 'relative'
+  )
+
+p3
+```
+### 3MMA SAAR
+```{r trade_balance_3mma_saar_plot, fig.cap="U.S. Trade Balance 3MMA SAAR showing exports, imports, and the trade deficit"}
+# Calculate 3-month moving averages and annualize them (SAAR)
+recent_data_3mma_saar <- recent_data_billions %>%
+  arrange(Date) %>%
+  mutate(
+    Exports_3MMA = zoo::rollmean(Exports_Total_B, k = 3, fill = NA, align = "right"),
+    Imports_3MMA = zoo::rollmean(Imports_Total_B, k = 3, fill = NA, align = "right"),
+    Balance_3MMA = zoo::rollmean(Balance_Total_B, k = 3, fill = NA, align = "right"),
+    # Convert to SAAR (multiply by 12 since data is monthly)
+    Exports_3MMA_SAAR = Exports_3MMA * 12,
+    Imports_3MMA_SAAR = Imports_3MMA * 12,
+    Balance_3MMA_SAAR = Balance_3MMA * 12
+  ) %>%
+  filter(!is.na(Exports_3MMA))  # Remove first 2 months with NA values
+
+p4 <- plot_ly(recent_data_3mma_saar, x = ~Date) %>%
+  add_trace(
+    y = ~Exports_3MMA_SAAR,
+    type = 'scatter', mode = 'lines',
+    line = list(color = unname(bocom_pal["tech_blue"]), width = 2),
+    name = 'Exports',
+    hovertemplate = 'Exports: $%{y:.0f}B'
+  ) %>%
+  add_trace(
+    y = ~Imports_3MMA_SAAR,
+    type = 'scatter', mode = 'lines',
+    line = list(color = unname(bocom_pal["BOCOM_red"]), width = 2),
+    name = 'Imports',
+    hovertemplate = 'Imports: $%{y:.0f}B'
+  ) %>%
+  add_trace(
+    y = ~(-Balance_3MMA_SAAR),
+    type = 'bar',
+    marker = list(
+      color = unname(bocom_pal["table_border"]),
+      line = list(width = 0)
+    ),
+    name = 'Deficit (rhs)',
+    hovertemplate = 'Trade Deficit: $%{y:.0f}B',
+    yaxis = 'y2'
+  ) %>%
+  layout(
+    title = list(
+      text = "U.S. Trade Balance 3MMA SAAR (Census Basis)",
+      font = list(size = 20),
+      x = 0.5,
+      xanchor = "center",
+      y = 0.95,
+      yanchor = "top"
+    ),
+    legend = list(
+      orientation = "h",
+      x = 0.5,
+      xanchor = "center",
+      y = 1.02,
+      yanchor = "bottom"
+    ),
+    margin = list(l = 80, r = 80, t = 120, b = 80, pad = 4),
+    xaxis = list(
+      title = "Source: U.S. Census Bureau",
+      showgrid = TRUE,
+      gridcolor = 'rgba(0,0,0,0.1)',
+      titlefont = list(size = 14),
+      tickfont = list(size = 12)
+    ),
+    yaxis = list(
+      title = "Balance in Billions of Dollars (3MMA SAAR)",
+      tickformat = ".0f",
+      showgrid = TRUE,
+      gridcolor = 'rgba(0,0,0,0.1)',
+      zeroline = FALSE,
+      side = 'left',
+      rangemode = "tozero",
+      titlefont = list(size = 14),
+      tickfont = list(size = 12)
+    ),
+    yaxis2 = list(
+      title = "Balance (rhs)",
+      overlaying = 'y',
+      side = 'right',
+      showgrid = FALSE,
+      zeroline = TRUE,
+      rangemode = "tozero",
+      titlefont = list(size = 14),
+      tickfont = list(size = 12),
+      tickformat = "$,.0f",
+      ticksuffix = "B"
+    ),
+    hovermode = 'x unified',
+    barmode = 'relative'
+  )
+
+p4
+```
+
+### Exports and Imports Trends
+
+```{r exports_imports_plot}
+p2 <- plot_ly(recent_data_billions, x = ~Date) %>%
+  add_trace(
+    y = ~Exports_Total_B,
+    type = 'scatter', mode = 'lines',
+    line = list(color = unname(bocom_pal["tech_blue"]), width = 3),
+    name = 'Exports',
+    hovertemplate = 'Exports: $%{y:.1f}B<extra></extra>'
+  ) %>%
+  add_trace(
+    y = ~Imports_Total_B,
+    type = 'scatter', mode = 'lines',
+    line = list(color = unname(bocom_pal["tech_red"]), width = 3),
+    name = 'Imports',
+    hovertemplate = 'Imports: $%{y:.1f}B<extra></extra>'
+  ) %>%
+  layout(
+    title = list(
+      text = "U.S. Exports and Imports (Census Basis)",
+      font = list(size = 20),
+      x = 0.5,
+      xanchor = "center"
+    ),
+    legend = list(
+      orientation = "h",
+      x = 0.5,
+      y = 1,
+      xanchor = "center",
+      yanchor = "top"
+    ),
+    margin = list(t = 100, b = 100),
+    xaxis = list(
+      title = "Source: U.S. Census Bureau",
+      showgrid = TRUE,
+      gridcolor = 'rgba(0,0,0,0.1)'
+    ),
+    yaxis = list(
+      title = "Billions of Dollars (Seasonally Adjusted)",
+      tickformat = "$,.0f",
+      showgrid = TRUE,
+      gridcolor = 'rgba(0,0,0,0.1)'
+    ),
+    hovermode = 'x unified'
+  )
+
+p2
+```
+
+
+# Trade in Goods: Country Analysis
+
+## Monthly Values {.tabset}
+
+### Imports from Key Trading Partners
+```{r imports_key_partners}
+# Key partners import trends
+key_partners <- data_long %>%
+  filter(cty_code %in% c("5700", "1220", "2010", "0003", "5880", "0009", "5520", "4419")) %>%
+  select(YM_Date, cty_desc, Import_Billions)
+
+total_imports <- data_long %>%
+  group_by(YM_Date) %>%
+  summarise(Total_Import_Billions = sum(Import_Billions, na.rm = TRUE)) %>%
+  mutate(cty_desc = "Total")
+
+# Create imports plot
+fig1 <- plot_ly()
+
+# Country colors (same as in fig_shares_12m)
+country_colors <- list(
+  "China" = 'red', "Canada" = '#188178', "Mexico" = '#003973',
+  "European Union" = '#FFD700', "Japan" = '#FF6B6B',
+  "South/Central America" = '#4ECDC4', "Vietnam" = '#95E1D3',
+  "Switzerland" = '#C7CEEA'
+)
+
+# Add traces for each country (now on LEFT axis)
+for(country in unique(key_partners$cty_desc)) {
+  country_data <- key_partners %>% filter(cty_desc == country)
+  color <- ifelse(country %in% names(country_colors), country_colors[[country]], 'gray')
+  
+  fig1 <- fig1 %>%
+    add_trace(x = country_data$YM_Date, 
+              y = country_data$Import_Billions,
+              name = country,  # Just the country name, no (lhs)
+              type = 'scatter', mode = 'lines',
+              line = list(color = color, width = 2),
+              yaxis = "y")
+}
+
+# Add total imports (now on RIGHT axis)
+fig1 <- fig1 %>%
+  add_trace(x = total_imports$YM_Date, 
+            y = total_imports$Total_Import_Billions,
+            name = "Total (rhs)",  # Only Total has (rhs)
+            type = 'scatter', mode = 'lines',
+            line = list(color = 'black', width = 3),
+            yaxis = "y2")
+
+fig1 <- fig1 %>%
+  layout(
+    title = list(
+      text = "Goods Imports From Key Trading Partners (Census Basis)",
+      y = 0.95, x = 0.5, xanchor = "center", yanchor = "top",
+      font = list(size = 20)
+    ),
+    xaxis = list(
+      title = "Source: U.S. Census Bureau",
+      titlefont = list(size = 12),
+      range = c(as.Date("2021-01-01"), as.Date("2025-01-01")),
+      tickformat = "%b %y", dtick = "M6",
+      showgrid = TRUE, gridcolor = 'lightgray'
+    ),
+    yaxis = list(
+      title = "Individual country imports (SA, $bn)",
+      side = "left", 
+      range = c(20, 60),
+      dtick = 5,
+      showgrid = TRUE, gridcolor = 'lightgray'
+    ),
+    yaxis2 = list(
+      title = "Total imports (SA, $bn)",
+      overlaying = "y", 
+      side = "right",
+      range = c(200, 360),
+      dtick = 20, 
+      showgrid = FALSE
+    ),
+    legend = list(orientation = "v", x = 1.1, y = 1, xanchor = "left", yanchor = "top", font = list(size = 10)),
+    hovermode = "x unified", plot_bgcolor = "white", paper_bgcolor = "white",
+    font = list(size = 9), margin = list(t = 60, b = 80)
+  )
+
+fig1
+```
+
+### Exports to Key Trading Partners
+```{r exports_key_partners}
+# Key partners export trends
+key_partners_exports <- data_long %>%
+  filter(cty_code %in% c("5700", "1220", "2010", "0003", "5880", "0009", "5520", "4419")) %>%
+  select(YM_Date, cty_desc, Export_Billions)
+
+total_exports <- data_long %>%
+  group_by(YM_Date) %>%
+  summarise(Total_Export_Billions = sum(Export_Billions, na.rm = TRUE)) %>%
+  mutate(cty_desc = "Total")
+
+# Create exports plot
+fig2 <- plot_ly()
+
+# Country colors (same as in imports plot)
+country_colors <- list(
+  "China" = 'red', "Canada" = '#188178', "Mexico" = '#003973',
+  "European Union" = '#FFD700', "Japan" = '#FF6B6B',
+  "South/Central America" = '#4ECDC4', "Vietnam" = '#95E1D3',
+  "Switzerland" = '#C7CEEA'
+)
+
+# Add traces for each country (on LEFT axis)
+for(country in unique(key_partners_exports$cty_desc)) {
+  country_data <- key_partners_exports %>% filter(cty_desc == country)
+  color <- ifelse(country %in% names(country_colors), country_colors[[country]], 'gray')
+  
+  fig2 <- fig2 %>%
+    add_trace(x = country_data$YM_Date, 
+              y = country_data$Export_Billions,
+              name = country,
+              type = 'scatter', mode = 'lines',
+              line = list(color = color, width = 2),
+              yaxis = "y")
+}
+
+# Add total exports (on RIGHT axis)
+fig2 <- fig2 %>%
+  add_trace(x = total_exports$YM_Date, 
+            y = total_exports$Total_Export_Billions,
+            name = "Total (rhs)",
+            type = 'scatter', mode = 'lines',
+            line = list(color = 'black', width = 3),
+            yaxis = "y2")
+
+fig2 <- fig2 %>%
+  layout(
+    title = list(
+      text = "Goods Exports To Key Trading Partners (Census Basis)",
+      y = 0.95, x = 0.5, xanchor = "center", yanchor = "top",
+      font = list(size = 20)
+    ),
+    xaxis = list(
+      title = "Source: U.S. Census Bureau",
+      titlefont = list(size = 12),
+      range = c(as.Date("2021-01-01"), as.Date("2025-01-01")),
+      tickformat = "%b %y", dtick = "M6",
+      showgrid = TRUE, gridcolor = 'lightgray'
+    ),
+    yaxis = list(
+      title = "Individual country exports (SA, $bn)",
+      side = "left", 
+      range = c(0, 40),  # Adjusted range for export values
+      dtick = 5,
+      showgrid = TRUE, gridcolor = 'lightgray'
+    ),
+    yaxis2 = list(
+      title = "Total exports (SA, $bn)",
+      overlaying = "y", 
+      side = "right",
+      range = c(120, 200),  # Adjusted range for total exports
+      dtick = 20, 
+      showgrid = FALSE
+    ),
+    legend = list(orientation = "v", x = 1.1, y = 1, xanchor = "left", yanchor = "top", font = list(size = 10)),
+    hovermode = "x unified", plot_bgcolor = "white", paper_bgcolor = "white",
+    font = list(size = 9), margin = list(t = 60, b = 80)
+  )
+
+fig2
+```
+
+## Market Share Analysis {.tabset}
+
+### Import Shares (12-Month Rolling)
+```{r import_shares}
+# Calculate 12-month rolling import shares
+rolling_data <- data_long %>%
+  arrange(cty_code, YM_Date) %>%
+  group_by(cty_code, cty_desc) %>%
+  mutate(Import_12M = rollapplyr(Import, width = 12, FUN = sum, partial = FALSE, fill = NA)) %>%
+  ungroup()
+
+total_rolling <- rolling_data %>%
+  group_by(YM_Date) %>%
+  summarise(Total_Import_12M = sum(Import, na.rm = TRUE)) %>%
+  arrange(YM_Date) %>%
+  mutate(Total_Import_12M_Rolling = rollapplyr(Total_Import_12M, width = 12, FUN = sum, partial = FALSE, fill = NA)) %>%
+  select(YM_Date, Total_Import_12M_Rolling)
+
+import_shares_12m <- rolling_data %>%
+  filter(cty_code %in% c("5700", "1220", "2010", "0003", "5880", "0009", "5520", "4419")) %>%
+  left_join(total_rolling, by = "YM_Date") %>%
+  mutate(Import_Share_12M = (Import_12M / Total_Import_12M_Rolling) * 100) %>%
+  filter(!is.na(Import_Share_12M)) %>%
+  select(YM_Date, cty_desc, Import_Share_12M)
+
+# Create import shares plot
+fig_shares_12m <- plot_ly()
+
+country_colors <- list(
+  "China" = 'red', "Canada" = '#188178', "Mexico" = '#003973',
+  "European Union" = '#FFD700', "Japan" = '#FF6B6B',
+  "South/Central America" = '#4ECDC4', "Vietnam" = '#95E1D3',
+  "Switzerland" = '#C7CEEA'
+)
+
+for(country in unique(import_shares_12m$cty_desc)) {
+  country_data <- import_shares_12m %>% filter(cty_desc == country)
+  color <- ifelse(country %in% names(country_colors), country_colors[[country]], 'gray')
+  
+  fig_shares_12m <- fig_shares_12m %>%
+    add_trace(x = country_data$YM_Date, y = country_data$Import_Share_12M,
+              name = country, type = 'scatter', mode = 'lines',
+              line = list(color = color, width = 2))
+}
+
+fig_shares_12m <- fig_shares_12m %>%
+  layout(
+    title = list(text = "12-Month Rolling Share of U.S. Goods Imports by Trading Partner",
+                 y = 0.95, x = 0.5, xanchor = "center", yanchor = "top", font = list(size = 20)),
+    xaxis = list(title = "Source: U.S. Census Bureau", titlefont = list(size = 12),
+                 tickformat = "%b %y", dtick = "M12", showgrid = TRUE, gridcolor = 'lightgray'),
+    yaxis = list(title = "12-Month Rolling Share of Total U.S. Imports (%)",
+                 titlefont = list(size = 14), range = c(0, 25), dtick = 2,
+                 showgrid = TRUE, gridcolor = 'lightgray', tickformat = ".0f"),
+    legend = list(orientation = "v", x = 1.02, y = 1, xanchor = "left", yanchor = "top", font = list(size = 10)),
+    hovermode = "x unified", plot_bgcolor = "white", paper_bgcolor = "white",
+    font = list(size = 12), margin = list(t = 60, b = 80, r = 150)
+  )
+
+fig_shares_12m
+```
+
+### Export Shares (12-Month Rolling)
+```{r export_shares}
+# Calculate 12-month rolling export shares
+rolling_data_exports <- data_long %>%
+  arrange(cty_code, YM_Date) %>%
+  group_by(cty_code, cty_desc) %>%
+  mutate(Export_12M = rollapplyr(Export, width = 12, FUN = sum, partial = FALSE, fill = NA)) %>%
+  ungroup()
+
+total_rolling_exports <- rolling_data_exports %>%
+  group_by(YM_Date) %>%
+  summarise(Total_Export_12M = sum(Export, na.rm = TRUE)) %>%
+  arrange(YM_Date) %>%
+  mutate(Total_Export_12M_Rolling = rollapplyr(Total_Export_12M, width = 12, FUN = sum, partial = FALSE, fill = NA)) %>%
+  select(YM_Date, Total_Export_12M_Rolling)
+
+export_shares_12m <- rolling_data_exports %>%
+  filter(cty_code %in% c("5700", "1220", "2010", "0003", "5880", "0009", "5520", "4419")) %>%
+  left_join(total_rolling_exports, by = "YM_Date") %>%
+  mutate(Export_Share_12M = (Export_12M / Total_Export_12M_Rolling) * 100) %>%
+  filter(!is.na(Export_Share_12M)) %>%
+  select(YM_Date, cty_desc, Export_Share_12M)
+
+# Create export shares plot
+fig_export_shares_12m <- plot_ly()
+
+for(country in unique(export_shares_12m$cty_desc)) {
+  country_data <- export_shares_12m %>% filter(cty_desc == country)
+  color <- ifelse(country %in% names(country_colors), country_colors[[country]], 'gray')
+  
+  fig_export_shares_12m <- fig_export_shares_12m %>%
+    add_trace(x = country_data$YM_Date, y = country_data$Export_Share_12M,
+              name = country, type = 'scatter', mode = 'lines',
+              line = list(color = color, width = 2))
+}
+
+fig_export_shares_12m <- fig_export_shares_12m %>%
+  layout(
+    title = list(text = "12-Month Rolling Share of U.S. Goods Exports by Trading Partner",
+                 y = 0.95, x = 0.5, xanchor = "center", yanchor = "top", font = list(size = 20)),
+    xaxis = list(title = "Source: U.S. Census Bureau", titlefont = list(size = 12),
+                 tickformat = "%b %y", dtick = "M12", showgrid = TRUE, gridcolor = 'lightgray'),
+    yaxis = list(title = "12-Month Rolling Share of Total U.S. Exports (%)",
+                 titlefont = list(size = 14), range = c(0, 25), dtick = 2,
+                 showgrid = TRUE, gridcolor = 'lightgray', tickformat = ".0f"),
+    legend = list(orientation = "v", x = 1.02, y = 1, xanchor = "left", yanchor = "top", font = list(size = 10)),
+    hovermode = "x unified", plot_bgcolor = "white", paper_bgcolor = "white",
+    font = list(size = 12), margin = list(t = 60, b = 80, r = 150)
+  )
+
+fig_export_shares_12m
+```
+### Trade Volume Shares (12 mo. rolling)
+```{r trade_volume_country_share}
+# Calculate 12-month rolling total trade (imports + exports)
+rolling_data_total <- data_long %>%
+  arrange(cty_code, YM_Date) %>%
+  group_by(cty_code, cty_desc) %>%
+  mutate(
+    Total_Trade = Import + Export,
+    Total_Trade_12M = rollapplyr(Total_Trade, width = 12, FUN = sum, partial = FALSE, fill = NA)
+  ) %>%
+  ungroup()
+
+# Calculate total rolling trade for all countries
+total_rolling_all <- rolling_data_total %>%
+  group_by(YM_Date) %>%
+  summarise(Total_Trade_All = sum(Total_Trade, na.rm = TRUE)) %>%
+  arrange(YM_Date) %>%
+  mutate(Total_Trade_All_12M = rollapplyr(Total_Trade_All, width = 12, FUN = sum, partial = FALSE, fill = NA)) %>%
+  select(YM_Date, Total_Trade_All_12M)
+
+# Calculate shares for selected countries
+trade_volume_shares_12m <- rolling_data_total %>%
+  filter(cty_code %in% c("5700", "1220", "2010", "0003", "5880", "0009", "5520", "4419")) %>%
+  left_join(total_rolling_all, by = "YM_Date") %>%
+  mutate(Trade_Volume_Share_12M = (Total_Trade_12M / Total_Trade_All_12M) * 100) %>%
+  filter(!is.na(Trade_Volume_Share_12M)) %>%
+  select(YM_Date, cty_desc, Trade_Volume_Share_12M)
+
+# Create trade volume shares plot
+fig_trade_volume_12m <- plot_ly()
+
+country_colors <- list(
+  "China" = 'red', "Canada" = '#188178', "Mexico" = '#003973',
+  "European Union" = '#FFD700', "Japan" = '#FF6B6B',
+  "South/Central America" = '#4ECDC4', "Vietnam" = '#95E1D3',
+  "Switzerland" = '#C7CEEA'
+)
+
+for(country in unique(trade_volume_shares_12m$cty_desc)) {
+  country_data <- trade_volume_shares_12m %>% filter(cty_desc == country)
+  color <- ifelse(country %in% names(country_colors), country_colors[[country]], 'gray')
+  
+  fig_trade_volume_12m <- fig_trade_volume_12m %>%
+    add_trace(x = country_data$YM_Date, y = country_data$Trade_Volume_Share_12M,
+              name = country, type = 'scatter', mode = 'lines',
+              line = list(color = color, width = 2))
+}
+
+fig_trade_volume_12m <- fig_trade_volume_12m %>%
+  layout(
+    title = list(text = "12-Month Rolling Share of U.S. Total Trade Volume by Trading Partner",
+                 y = 0.95, x = 0.5, xanchor = "center", yanchor = "top", font = list(size = 20)),
+    xaxis = list(title = "Source: U.S. Census Bureau", titlefont = list(size = 12),
+                 tickformat = "%b %y", dtick = "M12", showgrid = TRUE, gridcolor = 'lightgray'),
+    yaxis = list(title = "12-Month Rolling Share of Total U.S. Trade (Imports + Exports) (%)",
+                 titlefont = list(size = 14), range = c(0, 20), dtick = 2,
+                 showgrid = TRUE, gridcolor = 'lightgray', tickformat = ".0f"),
+    legend = list(orientation = "v", x = 1.02, y = 1, xanchor = "left", yanchor = "top", font = list(size = 10)),
+    hovermode = "x unified", plot_bgcolor = "white", paper_bgcolor = "white",
+    font = list(size = 12), margin = list(t = 60, b = 80, r = 150)
+  )
+
+fig_trade_volume_12m
+```
+
+### Index for imports 
+```{r import_indices_bycountry}
+# Calculate import indices (2019 = 100)
+import_indices <- data_long %>%
+  filter(cty_code %in% c("5700", "1220", "2010", "0003", "5880", "0009")) %>%  # Removed 4419 and 5520
+  group_by(cty_desc) %>%
+  mutate(
+    # Calculate 2019 average as base
+    base_2019 = mean(Import[Year == 2019], na.rm = TRUE),
+    # Calculate index
+    Import_Index = (Import / base_2019) * 100
+  ) %>%
+  ungroup() %>%
+  select(YM_Date, cty_desc, Import_Index)
+
+# Create import index plot
+fig_import_index <- plot_ly()
+
+# Define colors to match the style (removed Switzerland and Vietnam)
+index_colors <- list(
+  "China" = '#8B0000',           # Dark red
+  "Canada" = '#000080',          # Navy blue
+  "Mexico" = '#4682B4',          # Steel blue
+  "European Union" = '#1E90FF',  # Dodger blue
+  "Japan" = '#87CEEB',           # Sky blue
+  "South/Central America" = '#FF8C00'  # Dark orange
+)
+
+for(country in unique(import_indices$cty_desc)) {
+  country_data <- import_indices %>% 
+    filter(cty_desc == country) %>%
+    arrange(YM_Date)
+  
+  color <- ifelse(country %in% names(index_colors), index_colors[[country]], 'gray')
+  
+  fig_import_index <- fig_import_index %>%
+    add_trace(
+      x = country_data$YM_Date, 
+      y = country_data$Import_Index,
+      name = country, 
+      type = 'scatter', 
+      mode = 'lines',
+      line = list(color = color, width = 2.5)
+    )
+}
+
+# Add reference line at 100
+fig_import_index <- fig_import_index %>%
+  add_trace(
+    x = c(min(import_indices$YM_Date), max(import_indices$YM_Date)),
+    y = c(100, 100),
+    type = 'scatter',
+    mode = 'lines',
+    line = list(color = 'black', width = 1, dash = 'dot'),
+    showlegend = FALSE
+  )
+
+fig_import_index <- fig_import_index %>%
+  layout(
+    title = list(
+      text = "U.S. imports nominal level by origin (seasonally adjusted)",
+      y = 0.98, x = 0.02, 
+      xanchor = "left", yanchor = "top", 
+      font = list(size = 16, family = "Arial")
+    ),
+    xaxis = list(
+      title = "", 
+      showgrid = TRUE, 
+      gridcolor = '#E0E0E0',
+      tickformat = "%b %y",  # Changed to show month and year
+      dtick = "M6"  # Show tick every 6 months
+    ),
+    yaxis = list(
+      title = "Index (2019=100)", 
+      showgrid = TRUE, 
+      gridcolor = '#E0E0E0',
+      range = c(60, 240),
+      dtick = 20
+    ),
+    legend = list(
+      orientation = "v", 
+      x = 0.02, 
+      y = 0.5,
+      xanchor = "left", 
+      yanchor = "middle",
+      font = list(size = 11)
+    ),
+    hovermode = "x unified", 
+    plot_bgcolor = "#F5F5F5", 
+    paper_bgcolor = "white",
+    margin = list(t = 40, b = 40, l = 60, r = 40)
+  )
+
+fig_import_index
+```
+### Index for Exports
+```{r export_indices_bycountry}
+# Calculate import indices (2019 = 100)
+export_indices <- data_long %>%
+  filter(cty_code %in% c("5700", "1220", "2010", "0003", "5880", "0009")) %>%  # Removed 4419 and 5520
+  group_by(cty_desc) %>%
+  mutate(
+    # Calculate 2019 average as base
+    base_2019 = mean(Export[Year == 2019], na.rm = TRUE),
+    # Calculate index
+    Export_Index = (Export / base_2019) * 100
+  ) %>%
+  ungroup() %>%
+  select(YM_Date, cty_desc, Export_Index)
+
+# Create import index plot
+fig_export_index <- plot_ly()
+
+# Define colors to match the style (removed Switzerland and Vietnam)
+index_colors <- list(
+  "China" = '#8B0000',           # Dark red
+  "Canada" = '#000080',          # Navy blue
+  "Mexico" = '#4682B4',          # Steel blue
+  "European Union" = '#1E90FF',  # Dodger blue
+  "Japan" = '#87CEEB',           # Sky blue
+  "South/Central America" = '#FF8C00'  # Dark orange
+)
+
+for(country in unique(export_indices$cty_desc)) {
+  country_data <- export_indices %>% 
+    filter(cty_desc == country) %>%
+    arrange(YM_Date)
+  
+  color <- ifelse(country %in% names(index_colors), index_colors[[country]], 'gray')
+  
+  fig_export_index <- fig_export_index %>%
+    add_trace(
+      x = country_data$YM_Date, 
+      y = country_data$Export_Index,
+      name = country, 
+      type = 'scatter', 
+      mode = 'lines',
+      line = list(color = color, width = 2.5)
+    )
+}
+
+# Add reference line at 100
+fig_export_index <- fig_export_index %>%
+  add_trace(
+    x = c(min(export_indices$YM_Date), max(export_indices$YM_Date)),
+    y = c(100, 100),
+    type = 'scatter',
+    mode = 'lines',
+    line = list(color = 'black', width = 1, dash = 'dot'),
+    showlegend = FALSE
+  )
+
+fig_export_index <- fig_export_index %>%
+  layout(
+    title = list(
+      text = "U.S. exports nominal level by origin (seasonally adjusted)",
+      y = 0.98, x = 0.02, 
+      xanchor = "left", yanchor = "top", 
+      font = list(size = 16, family = "Arial")
+    ),
+    xaxis = list(
+      title = "", 
+      showgrid = TRUE, 
+      gridcolor = '#E0E0E0',
+      tickformat = "%b %y",  # Changed to show month and year
+      dtick = "M6"  # Show tick every 6 months
+    ),
+    yaxis = list(
+      title = "Index (2019=100)", 
+      showgrid = TRUE, 
+      gridcolor = '#E0E0E0',
+      range = c(60, 240),
+      dtick = 20
+    ),
+    legend = list(
+      orientation = "v", 
+      x = 0.02, 
+      y = 0.5,
+      xanchor = "left", 
+      yanchor = "middle",
+      font = list(size = 11)
+    ),
+    hovermode = "x unified", 
+    plot_bgcolor = "#F5F5F5", 
+    paper_bgcolor = "white",
+    margin = list(t = 40, b = 40, l = 60, r = 40)
+  )
+
+fig_export_index
+```
+## MoM Change {.tabset}
+
+### MoM Change in Imports by Country
+```{r mom_change_imports}
+# Table 2: Export Performance Table
+latest_date <- max(data_long$YM_Date)
+
+# Modified dates - removing Dec-24 (6 months ago)
+dates_needed <- c(
+  latest_date %m-% months(5), latest_date %m-% months(4),
+  latest_date %m-% months(3), latest_date %m-% months(2),
+  latest_date %m-% months(1), latest_date,
+  latest_date %m-% years(1)  # May-24 for comparison
+)
+
+country_codes <- c("0020", "0003", "1220", "2010", "0009", "5700", "4120", "5880", 
+                   "4280", "5800", "3510", "0017", "4279", "5330", "5081", "5170")
+
+import_table_data <- data_long %>%
+  filter(cty_code %in% country_codes & YM_Date %in% dates_needed) %>%
+  select(cty_code, cty_desc, YM_Date, Import) %>%
+  arrange(cty_code, YM_Date)
+
+total_imports_by_date <- data_long %>%
+  filter(YM_Date %in% dates_needed) %>%
+  group_by(YM_Date) %>%
+  summarise(Total_Import = sum(Import, na.rm = TRUE))
+
+import_table_data <- import_table_data %>%
+  left_join(total_imports_by_date, by = "YM_Date") %>%
+  mutate(Share = (Import / Total_Import) * 100)
+
+import_wide <- import_table_data %>%
+  select(cty_code, cty_desc, YM_Date, Import) %>%
+  pivot_wider(names_from = YM_Date, values_from = Import, names_prefix = "Import_")
+
+# Calculate month-over-month changes (now for 5 months instead of 6)
+mom_changes <- import_wide %>%
+  mutate(
+    MoM_5 = ((get(paste0("Import_", dates_needed[2])) / get(paste0("Import_", dates_needed[1])) - 1) * 100),
+    MoM_4 = ((get(paste0("Import_", dates_needed[3])) / get(paste0("Import_", dates_needed[2])) - 1) * 100),
+    MoM_3 = ((get(paste0("Import_", dates_needed[4])) / get(paste0("Import_", dates_needed[3])) - 1) * 100),
+    MoM_2 = ((get(paste0("Import_", dates_needed[5])) / get(paste0("Import_", dates_needed[4])) - 1) * 100),
+    MoM_1 = ((get(paste0("Import_", dates_needed[6])) / get(paste0("Import_", dates_needed[5])) - 1) * 100)
+  )
+
+current_shares <- import_table_data %>%
+  filter(YM_Date == latest_date) %>%
+  select(cty_code, Share_Current = Share)
+
+last_year_shares <- import_table_data %>%
+  filter(YM_Date == dates_needed[7]) %>%  # May-24
+  select(cty_code, Share_LastYear = Share)
+
+final_table <- mom_changes %>%
+  left_join(current_shares, by = "cty_code") %>%
+  left_join(last_year_shares, by = "cty_code") %>%
+  select(cty_desc, Share_LastYear, starts_with("MoM_"), Share_Current)
+
+# Updated column names with May-24 first
+col_names <- c("Countries", 
+               format(dates_needed[7], "%b-%y"),  # May-24 first
+               format(dates_needed[2], "%b-%y"), format(dates_needed[3], "%b-%y"),
+               format(dates_needed[4], "%b-%y"), format(dates_needed[5], "%b-%y"),
+               format(dates_needed[6], "%b-%y"),  # May-25 last
+               "Share of total")
+
+names(final_table) <- col_names
+
+final_table <- final_table %>% arrange(desc(`Share of total`))
+
+final_table %>%
+  kable(format = "html", digits = 1,
+        caption = "<div style='text-align: center; color: #AE0E16; font-weight: bold; font-size: 18px; margin-bottom: 15px;'>United States - Import of Goods by Country (MoM % Change)</div>",
+        align = c('l', rep('r', ncol(final_table)-1)),
+        escape = FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE, font_size = 12) %>%
+  column_spec(1, bold = TRUE, width = "200px") %>%
+  column_spec(2, width = "80px") %>%  # May-24
+  column_spec(3:7, width = "80px") %>%  # MoM columns
+  column_spec(8, bold = TRUE, background = "#f0f0f0", width = "100px") %>%  # Share of total
+  row_spec(0, bold = TRUE, background = "#003973", color = "white") %>%
+  footnote(general = c("Source: US Census Bureau", 
+                       "*CAFTA-DR = Central America-Dominican Republic Free Trade Agreement"),
+           general_title = "")
+```
+
+
+### MoM Change in Exports by Country
+```{r export_performance_table}
+# Table 2: Export Performance Table
+latest_date <- max(data_long$YM_Date)
+
+# Modified dates - removing Dec-24 (6 months ago)
+dates_needed <- c(
+  latest_date %m-% months(5), latest_date %m-% months(4),
+  latest_date %m-% months(3), latest_date %m-% months(2),
+  latest_date %m-% months(1), latest_date,
+  latest_date %m-% years(1)  # May-24 for comparison
+)
+
+country_codes <- c("0020", "0003", "1220", "2010", "0009", "5700", "4120", "5880", 
+                   "4280", "5800", "3510", "0017", "4279", "5330", "5081", "5170")
+
+export_table_data <- data_long %>%
+  filter(cty_code %in% country_codes & YM_Date %in% dates_needed) %>%
+  select(cty_code, cty_desc, YM_Date, Export) %>%
+  arrange(cty_code, YM_Date)
+
+total_exports_by_date <- data_long %>%
+  filter(YM_Date %in% dates_needed) %>%
+  group_by(YM_Date) %>%
+  summarise(Total_Export = sum(Export, na.rm = TRUE))
+
+export_table_data <- export_table_data %>%
+  left_join(total_exports_by_date, by = "YM_Date") %>%
+  mutate(Share = (Export / Total_Export) * 100)
+
+export_wide <- export_table_data %>%
+  select(cty_code, cty_desc, YM_Date, Export) %>%
+  pivot_wider(names_from = YM_Date, values_from = Export, names_prefix = "Export_")
+
+# Calculate month-over-month changes (now for 5 months instead of 6)
+mom_changes <- export_wide %>%
+  mutate(
+    MoM_5 = ((get(paste0("Export_", dates_needed[2])) / get(paste0("Export_", dates_needed[1])) - 1) * 100),
+    MoM_4 = ((get(paste0("Export_", dates_needed[3])) / get(paste0("Export_", dates_needed[2])) - 1) * 100),
+    MoM_3 = ((get(paste0("Export_", dates_needed[4])) / get(paste0("Export_", dates_needed[3])) - 1) * 100),
+    MoM_2 = ((get(paste0("Export_", dates_needed[5])) / get(paste0("Export_", dates_needed[4])) - 1) * 100),
+    MoM_1 = ((get(paste0("Export_", dates_needed[6])) / get(paste0("Export_", dates_needed[5])) - 1) * 100)
+  )
+
+current_shares <- export_table_data %>%
+  filter(YM_Date == latest_date) %>%
+  select(cty_code, Share_Current = Share)
+
+last_year_shares <- export_table_data %>%
+  filter(YM_Date == dates_needed[7]) %>%  # May-24
+  select(cty_code, Share_LastYear = Share)
+
+final_table <- mom_changes %>%
+  left_join(current_shares, by = "cty_code") %>%
+  left_join(last_year_shares, by = "cty_code") %>%
+  select(cty_desc, Share_LastYear, starts_with("MoM_"), Share_Current)
+
+# Updated column names with May-24 first
+col_names <- c("Countries", 
+               format(dates_needed[7], "%b-%y"),  # May-24 first
+               format(dates_needed[2], "%b-%y"), format(dates_needed[3], "%b-%y"),
+               format(dates_needed[4], "%b-%y"), format(dates_needed[5], "%b-%y"),
+               format(dates_needed[6], "%b-%y"),  # May-25 last
+               "Share of total")
+
+names(final_table) <- col_names
+
+final_table <- final_table %>% arrange(desc(`Share of total`))
+
+final_table %>%
+  kable(format = "html", digits = 1,
+        caption = "<div style='text-align: center; color: #AE0E16; font-weight: bold; font-size: 18px; margin-bottom: 15px;'>United States - Export of Goods by Country (MoM % Change)</div>",
+        align = c('l', rep('r', ncol(final_table)-1)),
+        escape = FALSE) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE, font_size = 12) %>%
+  column_spec(1, bold = TRUE, width = "200px") %>%
+  column_spec(2, width = "80px") %>%  # May-24
+  column_spec(3:7, width = "80px") %>%  # MoM columns
+  column_spec(8, bold = TRUE, background = "#f0f0f0", width = "100px") %>%  # Share of total
+  row_spec(0, bold = TRUE, background = "#003973", color = "white") %>%
+  footnote(general = c("Source: US Census Bureau", 
+                       "*CAFTA-DR = Central America-Dominican Republic Free Trade Agreement"),
+           general_title = "")
+```
+
+# Petroleum vs. Non-Petroleun
+
+## Petroleum vs. Non-Petroleum Trade Balance 
+
+```{r petroleum_balance}
+# Prepare petroleum data
+plot_data_petro <- petro_data %>%
+  mutate(Date = as.Date(Date)) %>%
+  filter(!is.na(Balance_Petroleum))
+
+# Get last 20 years
+max_date_petro <- max(plot_data_petro$Date)
+min_date_petro <- max_date_petro - years(20)
+recent_data_petro <- plot_data_petro %>%
+  filter(Date >= min_date_petro)
+
+# Convert to billions
+recent_data_billions_petro <- recent_data_petro %>%
+  mutate(
+    Balance_Petroleum_B = Balance_Petroleum / 1000,
+    Balance_Non_Petroleum_B = Balance_Non_Petroleum / 1000,
+    Balance_Total_B = (Balance_Petroleum + Balance_Non_Petroleum) / 1000,
+    Exports_Petroleum_B = Exports_Petroleum / 1000,
+    Exports_Non_Petroleum_B = Exports_Non_Petroleum / 1000,
+    Imports_Petroleum_B = Imports_Petroleum / 1000,
+    Imports_Non_Petroleum_B = Imports_Non_Petroleum / 1000
+  )
+
+# Plot 4: Petroleum Trade Balance
+p1_petro <- plot_ly(recent_data_billions_petro, x = ~Date) %>%
+  add_trace(
+    y = ~Balance_Total_B,
+    type = 'bar',
+    marker = list(color = unname(bocom_pal["table_border"]), line = list(width = 0)),
+    name = 'Total Balance',
+    hovertemplate = 'Total: $%{y:.1f}B<extra></extra>'
+  ) %>%
+  add_trace(
+    y = ~Balance_Petroleum_B,
+    type = 'scatter', mode = 'lines',
+    line = list(color = unname(bocom_pal["BOCOM_blue"]), width = 2),
+    name = 'Petroleum Balance',
+    hovertemplate = 'Petroleum: $%{y:.1f}B<extra></extra>'
+  ) %>%
+  add_trace(
+    y = ~Balance_Non_Petroleum_B,
+    type = 'scatter', mode = 'lines',
+    line = list(color = unname(bocom_pal["grayed_green"]), width = 2),
+    name = 'Non-Petroleum Balance',
+    hovertemplate = 'Non-Petroleum: $%{y:.1f}B<extra></extra>'
+  ) %>%
+  add_trace(
+    y = 0, type = 'scatter', mode = 'lines',
+    line = list(color = 'black', width = 1),
+    showlegend = FALSE, hoverinfo = 'none'
+  ) %>%
+  layout(
+    title = list(
+      text = "U.S. Trade Balance: Petroleum vs. Non-Petroleum (Census Basis)",
+      font = list(size = 20), x = 0.5, xanchor = "center"
+    ),
+    legend = list(orientation = "h", x = 0.5, xanchor = "center", y = 1, yanchor = "bottom"),
+    margin = list(t = 100, b = 100),
+    xaxis = list(title = "Source: U.S. Census Bureau", showgrid = TRUE, gridcolor = 'rgba(0,0,0,0.1)'),
+    yaxis = list(
+      title = "Balance in Billions of Dollars (Seasonally Adjusted)",
+      tickformat = ".0f", showgrid = TRUE, gridcolor = 'rgba(0,0,0,0.1)', zeroline = FALSE
+    ),
+    hovermode = 'x unified'
+  )
+
+p1_petro
+```
+
+## Petroleum Trade Flows {.tabset}
+
+### Imports
+
+```{r petroleum_imports}
+p2a_imports <- plot_ly(recent_data_billions_petro, x = ~Date) %>%
+  add_trace(
+    y = ~Imports_Petroleum_B,
+    type = 'scatter', mode = 'lines',
+    line = list(color = unname(bocom_pal["BOCOM_blue"]), width = 3),
+    name = 'Petroleum',
+    hovertemplate = 'Petroleum: $%{y:.1f}B<extra></extra>'
+  ) %>%
+  add_trace(
+    y = ~Imports_Non_Petroleum_B,
+    type = 'scatter', mode = 'lines',
+    line = list(color = unname(bocom_pal["grayed_green"]), width = 3),
+    name = 'Non-Petroleum',
+    hovertemplate = 'Non-Petroleum: $%{y:.1f}B<extra></extra>'
+  ) %>%
+  layout(
+    title = list(
+      text = "U.S. Imports: Petroleum vs Non-Petroleum (Census Basis)",
+      font = list(size = 20), x = 0.5, xanchor = "center"
+    ),
+    legend = list(orientation = "h", x = 0.5, xanchor = "center", y = 0.95, yanchor = "bottom"),
+    margin = list(t = 100, b = 100),
+    xaxis = list(title = "Source: U.S. Census Bureau", showgrid = TRUE, gridcolor = 'rgba(0,0,0,0.1)'),
+    yaxis = list(
+      title = "Billions of Dollars (Seasonally Adjusted)",
+      tickformat = ".0f", showgrid = TRUE, gridcolor = 'rgba(0,0,0,0.1)'
+    ),
+    hovermode = 'x unified'
+  )
+
+p2a_imports
+```
+
+### Exports
+
+```{r petroleum_exports}
+p2b_exports <- plot_ly(recent_data_billions_petro, x = ~Date) %>%
+  add_trace(
+    y = ~Exports_Petroleum_B,
+    type = 'scatter', mode = 'lines',
+    line = list(color = unname(bocom_pal["BOCOM_blue"]), width = 3),
+    name = 'Petroleum',
+    hovertemplate = 'Petroleum: $%{y:.1f}B<extra></extra>'
+  ) %>%
+  add_trace(
+    y = ~Exports_Non_Petroleum_B,
+    type = 'scatter', mode = 'lines',
+    line = list(color = unname(bocom_pal["grayed_green"]), width = 3),
+    name = 'Non-Petroleum',
+    hovertemplate = 'Non-Petroleum: $%{y:.1f}B<extra></extra>'
+  ) %>%
+  layout(
+    title = list(
+      text = "U.S. Exports: Petroleum vs Non-Petroleum (Census Basis)",
+      font = list(size = 20), x = 0.5, xanchor = "center"
+    ),
+    legend = list(orientation = "h", x = 0.5, xanchor = "center", y = 0.95, yanchor = "bottom"),
+    margin = list(t = 100, b = 100),
+    xaxis = list(title = "Source: U.S. Census Bureau", showgrid = TRUE, gridcolor = 'rgba(0,0,0,0.1)'),
+    yaxis = list(
+      title = "Billions of Dollars (Seasonally Adjusted)",
+      tickformat = ".0f", showgrid = TRUE, gridcolor = 'rgba(0,0,0,0.1)'
+    ),
+    hovermode = 'x unified'
+  )
+
+p2b_exports
+```
+
+# Product Category Analysis
+## Top Products {.tabset} 
+```{r cleaning_full_data}
+full_data$HS2 <- substr(full_data$HS_Code, 1, 2)
+full_data$YearMonth <- as.Date(paste(full_data$Year, full_data$Month, "01", sep = "-"))
+
+# Get current date info for filtering
+current_year <- as.numeric(format(Sys.Date(), "%Y"))
+current_month <- as.numeric(format(Sys.Date(), "%m"))
+
+# Filter out future months
+full_data <- full_data %>%
+  filter(!(Year == current_year & Month > current_month))
+# Get the most recent complete month in the data
+latest_complete_month <- full_data %>%
+  filter(Year == max(Year)) %>%
+  summarise(max_month = max(Month)) %>%
+  pull(max_month)
+
+latest_year <- max(full_data$Year)
+
+# If we're past the latest month in the current year, use previous month
+if (latest_complete_month == 12 && current_month < 12) {
+  latest_year <- latest_year - 1
+  latest_month <- 12
+} else {
+  latest_month <- latest_complete_month
+}
+
+# Calculate total exports and imports for the latest month
+monthly_totals <- full_data %>%
+  filter(Year == latest_year & Month == latest_month) %>%
+  group_by(Direction) %>%
+  summarise(Total_Value = sum(Value, na.rm = TRUE))
+
+total_exports_month <- monthly_totals %>%
+  filter(Direction == "Exports") %>%
+  pull(Total_Value)
+
+total_imports_month <- monthly_totals %>%
+  filter(Direction == "Imports") %>%
+  pull(Total_Value)
+
+# Top 10 Exports by HS4 code
+top_exports_hs4 <- full_data %>%
+  filter(Year == latest_year & Month == latest_month & Direction == "Exports") %>%
+  group_by(HS_Code, Description) %>%
+  summarise(Value = sum(Value, na.rm = TRUE), .groups = 'drop') %>%
+  mutate(
+    Share_Percent = (Value / total_exports_month) * 100,
+    Value_Billions = Value / 1e9
+  ) %>%
+  arrange(desc(Share_Percent)) %>%
+  head(10) %>%
+  select(
+    `HS Code` = HS_Code,
+    Description,
+    `Value ($B)` = Value_Billions,
+    `Share (%)` = Share_Percent
+  )
+
+# Top 10 Imports by HS4 code
+top_imports_hs4 <- full_data %>%
+  filter(Year == latest_year & Month == latest_month & Direction == "Imports") %>%
+  group_by(HS_Code, Description) %>%
+  summarise(Value = sum(Value, na.rm = TRUE), .groups = 'drop') %>%
+  mutate(
+    Share_Percent = (Value / total_imports_month) * 100,
+    Value_Billions = Value / 1e9
+  ) %>%
+  arrange(desc(Share_Percent)) %>%
+  head(10) %>%
+  select(
+    `HS Code` = HS_Code,
+    Description,
+    `Value ($B)` = Value_Billions,
+    `Share (%)` = Share_Percent
+  )
+
+```
+### Exports
+```{r testing_exports, echo=FALSE, results='asis'}
+top_exports_hs4 %>%
+  kable(
+    format    = "html",
+    digits    = c(0, 0, 2, 1),
+    caption   = paste0(
+      "Top 10 U.S. Exports by HS4 Code – ",
+      month.name[latest_month], " ", latest_year
+    ),
+    align     = c("l","l","r","r")
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width        = FALSE,
+    font_size         = 12
+  ) %>%
+  column_spec(1, width = "80px") %>%
+  column_spec(2, width = "400px") %>%
+  column_spec(3, width = "100px", bold = TRUE) %>%
+  column_spec(4, width = "80px") %>%
+  row_spec(
+    0,
+    bold       = TRUE,
+    color      = "white",
+    background = "#003973"
+  ) %>%
+  footnote(
+    general       = paste0(
+                       "Total Exports: $",
+                       round(total_exports_month / 1e9, 1),
+                       " billion"
+                     ),
+    general_title = ""
+  )
+```
+
+### Imports
+```{r load_hs4_export_table}
+# Create imports table
+top_imports_hs4 %>%
+  kable(format = "html", 
+        digits = c(0, 0, 2, 1),
+        caption = paste0("Top 10 U.S. Imports by HS4 Code - ", month.name[latest_month], " ", latest_year),
+        align = c('l', 'l', 'r', 'r')) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE,
+                font_size = 12) %>%
+  column_spec(1, width = "80px") %>%
+  column_spec(2, width = "400px") %>%
+  column_spec(3, width = "100px", bold = TRUE) %>%
+  column_spec(4, width = "80px") %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#003973") %>%
+  footnote(general = paste0("Total Imports: $", round(total_imports_month/1e9, 1), " billion"),
+           general_title = "")
+
+```
+### Top Imports Trajectory
+```{r import_trajectories_filtered}
+# Get the HS codes from the tables and filter out codes starting with 9
+top10_import_codes <- top_imports_hs4$`HS Code`[!grepl("^9", top_imports_hs4$`HS Code`)]
+
+# Create dictionary for abbreviated descriptions
+hs_abbrev <- c(
+  "8471" = "Computers",
+  "8800" = "Civilian Aircrafts",
+  "2709" = "Crude Oil",
+  "2710" = "Oil (not crude)",
+  "7115" = "Art. of Precious metals",
+  "2711" = "Petroleum Gases",
+  "3002" = "Blood, vaccines etc.",
+  "8703" = "Automobiles",
+  "8542" = "Integrated circuits",
+  "8517" = "Phones",
+  "3004" = "Medicaments",
+  "8708" = "Vehicle parts",
+  "8473" = "Parts for electronics",
+  "2937" = "Hormones, steroids, etc."
+)
+
+# Calculate monthly totals for percentage calculation
+monthly_totals_all <- full_data %>%
+  group_by(YearMonth, Direction) %>%
+  summarise(Total_Value = sum(Value, na.rm = TRUE), .groups = 'drop')
+
+# Filter and calculate 3MMA shares for top imports (excluding 9xxx codes)
+imports_trajectories <- full_data %>%
+  filter(Direction == "Imports" & HS_Code %in% top10_import_codes) %>%
+  group_by(YearMonth, HS_Code, Description) %>%
+  summarise(Value = sum(Value, na.rm = TRUE), .groups = 'drop') %>%
+  left_join(monthly_totals_all %>% filter(Direction == "Imports"), by = "YearMonth") %>%
+  arrange(HS_Code, YearMonth) %>%
+  group_by(HS_Code) %>%
+  mutate(
+    # Calculate 3-month moving averages
+    Value_3MMA = zoo::rollmean(Value, k = 3, fill = NA, align = "right"),
+    Total_3MMA = zoo::rollmean(Total_Value, k = 3, fill = NA, align = "right"),
+    # Calculate share using 3MMA values
+    Share_3MMA = (Value_3MMA / Total_3MMA) * 100
+  ) %>%
+  ungroup() %>%
+  # Remove rows with NA values (first 2 months for each series)
+  filter(!is.na(Share_3MMA)) %>%
+  arrange(YearMonth, HS_Code)
+
+# Color palette
+hs4_colors <- c("#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00", 
+                "#ffff33", "#a65628", "#f781bf", "#999999", "#66c2a5")
+
+# Create imports trajectory plot with 3MMA
+imports_traj_fig <- plot_ly()
+
+for(i in 1:length(top10_import_codes)) {
+  hs_code <- top10_import_codes[i]
+  hs_data <- imports_trajectories %>%
+    filter(HS_Code == hs_code) %>%
+    arrange(YearMonth)
+  
+  if(nrow(hs_data) > 0) {
+    # Use abbreviated description if available, otherwise use truncated original
+    if(hs_code %in% names(hs_abbrev)) {
+      label <- paste0(hs_code, ": ", hs_abbrev[hs_code])
+    } else {
+      desc <- top_imports_hs4$Description[top_imports_hs4$`HS Code` == hs_code]
+      label <- paste0(hs_code, " - ", substr(desc, 1, 30))
+      if(nchar(desc) > 30) label <- paste0(label, "...")
+    }
+    
+    imports_traj_fig <- imports_traj_fig %>%
+      add_trace(
+        x = hs_data$YearMonth,
+        y = hs_data$Share_3MMA,
+        name = label,
+        type = 'scatter',
+        mode = 'lines',
+        line = list(width = 2.5, color = hs4_colors[i])
+      )
+  }
+}
+
+imports_traj_fig <- imports_traj_fig %>%
+  layout(
+    title = paste0("Monthly Share of U.S. Goods Imports by Top HS4 Codes - 3MMA (", 
+                   month.name[latest_month], " ", latest_year, ")"),
+    xaxis = list(
+      title = "",
+      showgrid = TRUE,
+      gridcolor = 'lightgray'
+    ),
+    yaxis = list(
+      title = "Share of Total U.S. Imports - 3MMA (%)",
+      showgrid = TRUE,
+      gridcolor = 'lightgray',
+      rangemode = "tozero"
+    ),
+    hovermode = 'x unified',
+    showlegend = TRUE,
+    legend = list(
+      x = 1.02,
+      y = 0.98,
+      xanchor = "left",
+      yanchor = "top"
+    ),
+    margin = list(r = 300, b = 80),
+    annotations = list(
+      list(
+        x = 0.5, y = -0.15,
+        text = "Source: U.S. Census Bureau",
+        xref = "paper", yref = "paper",
+        xanchor = "center",
+        showarrow = FALSE,
+        font = list(size = 11, color = "gray")
+      )
+    )
+  )
+
+imports_traj_fig
+```
+### Top Exports Trajectory
+```{r export_trajectories_filtered}
+# Get the HS codes from the tables and filter out codes starting with 9
+top10_export_codes <- top_exports_hs4$`HS Code`[!grepl("^9", top_exports_hs4$`HS Code`)]
+
+# Filter and calculate 3MMA shares for top exports (excluding 9xxx codes)
+exports_trajectories <- full_data %>%
+  filter(Direction == "Exports" & HS_Code %in% top10_export_codes) %>%
+  group_by(YearMonth, HS_Code, Description) %>%
+  summarise(Value = sum(Value, na.rm = TRUE), .groups = 'drop') %>%
+  left_join(monthly_totals_all %>% filter(Direction == "Exports"), by = "YearMonth") %>%
+  arrange(HS_Code, YearMonth) %>%
+  group_by(HS_Code) %>%
+  mutate(
+    # Calculate 3-month moving averages
+    Value_3MMA = zoo::rollmean(Value, k = 3, fill = NA, align = "right"),
+    Total_3MMA = zoo::rollmean(Total_Value, k = 3, fill = NA, align = "right"),
+    # Calculate share using 3MMA values
+    Share_3MMA = (Value_3MMA / Total_3MMA) * 100
+  ) %>%
+  ungroup() %>%
+  # Remove rows with NA values (first 2 months for each series)
+  filter(!is.na(Share_3MMA)) %>%
+  arrange(YearMonth, HS_Code)
+
+# Create exports trajectory plot with 3MMA
+exports_traj_fig <- plot_ly()
+
+for(i in 1:length(top10_export_codes)) {
+  hs_code <- top10_export_codes[i]
+  hs_data <- exports_trajectories %>%
+    filter(HS_Code == hs_code) %>%
+    arrange(YearMonth)
+  
+  if(nrow(hs_data) > 0) {
+    # Use abbreviated description if available, otherwise use truncated original
+    if(hs_code %in% names(hs_abbrev)) {
+      label <- paste0(hs_code, ": ", hs_abbrev[hs_code])
+    } else {
+      desc <- top_exports_hs4$Description[top_exports_hs4$`HS Code` == hs_code]
+      label <- paste0(hs_code, " - ", substr(desc, 1, 30))
+      if(nchar(desc) > 30) label <- paste0(label, "...")
+    }
+    
+    exports_traj_fig <- exports_traj_fig %>%
+      add_trace(
+        x = hs_data$YearMonth,
+        y = hs_data$Share_3MMA,
+        name = label,
+        type = 'scatter',
+        mode = 'lines',
+        line = list(width = 2.5, color = hs4_colors[i])
+      )
+  }
+}
+
+exports_traj_fig <- exports_traj_fig %>%
+  layout(
+    title = paste0("Monthly Share of U.S. Goods Exports by Top HS4 Codes - 3MMA (", 
+                   month.name[latest_month], " ", latest_year, ")"),
+    xaxis = list(
+      title = "",
+      showgrid = TRUE,
+      gridcolor = 'lightgray'
+    ),
+    yaxis = list(
+      title = "Share of Total U.S. Exports - 3MMA (%)",
+      showgrid = TRUE,
+      gridcolor = 'lightgray',
+      rangemode = "tozero"
+    ),
+    hovermode = 'x unified',
+    showlegend = TRUE,
+    legend = list(
+      x = 1.02,
+      y = 0.98,
+      xanchor = "left",
+      yanchor = "top"
+    ),
+    margin = list(r = 300, b = 80),
+    annotations = list(
+      list(
+        x = 0.5, y = -0.15,
+        text = "Source: U.S. Census Bureau",
+        xref = "paper", yref = "paper",
+        xanchor = "center",
+        showarrow = FALSE,
+        font = list(size = 11, color = "gray")
+      )
+    )
+  )
+
+exports_traj_fig
+```
+## Product Category Analysis {.tabset}
+### Imports by General Aggregation
+```{r load_full_data}
+# Define the ALTERNATIVE HS category mapping
+alt_hs_categories <- data.frame(
+  HS2 = sprintf("%02d", 1:99),
+  Category = c(
+    rep("Animals, vegetables and food products", 24),
+    rep("Mineral Products", 3),
+    rep("Chemicals", 11),
+    rep("Other Intermediary goods", 11),
+    rep("Textiles", 14),
+    rep("Miscellaneous manufactured", 4),
+    rep("Metals", 16),
+    rep("Machinery", 2),
+    rep("Vehicles", 4),
+    rep("Miscellaneous manufactured", 10)
+  ),
+  stringsAsFactors = FALSE
+)[1:99,]
+
+# Create alternative full_data
+full_data$YearMonth <- as.Date(paste(full_data$Year, full_data$Month, "01", sep = "-"))
+alt_full_data <- full_data %>%
+  left_join(alt_hs_categories, by = "HS2")
+
+# Aggregate by month and alternative category
+alt_monthly_category_data <- alt_full_data %>%
+  group_by(YearMonth, Category, Direction) %>%
+  summarise(
+    Value_Billions = sum(Value, na.rm = TRUE) / 1e9,
+    .groups = 'drop'
+  )
+
+# Define color palette for alternative categories
+alt_category_colors <- c(
+  "Animals, vegetables and food products" = "#228B22",
+  "Mineral Products" = "#708090",
+  "Chemicals" = "#4682B4",
+  "Other Intermediary goods" = "#9370DB",
+  "Textiles" = "#DC143C",
+  "Miscellaneous manufactured" = "#FF6347",
+  "Metals" = "#4169E1",
+  "Machinery" = "#000080",
+  "Vehicles" = "#006400"
+)
+
+# Filter for imports only
+alt_imports_data <- alt_monthly_category_data %>%
+  filter(Direction == "Imports") %>%
+  arrange(YearMonth, Category)
+
+# Calculate 12-month rolling sums
+imports_12mo <- alt_imports_data %>%
+  arrange(Category, YearMonth) %>%
+  group_by(Category) %>%
+  mutate(
+    Value_12mo = rollapply(Value_Billions, 
+                           width = 12, 
+                           FUN = sum, 
+                           align = "right", 
+                           fill = NA)
+  ) %>%
+  ungroup()
+
+# Calculate total 12-month rolling sum
+alt_imports_total <- alt_imports_data %>%
+  group_by(YearMonth) %>%
+  summarise(Value_Billions = sum(Value_Billions, na.rm = TRUE))
+
+imports_total_12mo <- alt_imports_total %>%
+  arrange(YearMonth) %>%
+  mutate(
+    Value_12mo = rollapply(Value_Billions, 
+                           width = 12, 
+                           FUN = sum, 
+                           align = "right", 
+                           fill = NA)
+  )
+
+# Get categories ordered by total value
+alt_category_totals_12mo <- imports_12mo %>%
+  filter(!is.na(Value_12mo)) %>%
+  group_by(Category) %>%
+  summarise(Total = sum(Value_12mo, na.rm = TRUE)) %>%
+  arrange(desc(Total))
+
+# Create 12-month rolling imports plot
+alt_fig_12mo <- plot_ly()
+
+# Add traces for each category
+for(i in 1:nrow(alt_category_totals_12mo)) {
+  cat_name <- alt_category_totals_12mo$Category[i]
+  cat_color <- alt_category_colors[cat_name]
+  
+  cat_data <- imports_12mo %>% 
+    filter(Category == cat_name & !is.na(Value_12mo)) %>%
+    arrange(YearMonth)
+  
+  alt_fig_12mo <- alt_fig_12mo %>%
+    add_trace(
+      x = cat_data$YearMonth,
+      y = cat_data$Value_12mo,
+      name = cat_name,
+      type = 'scatter',
+      mode = 'none',
+      fill = 'tonexty',
+      fillcolor = cat_color,
+      line = list(width = 0, color = cat_color),
+      stackgroup = 'imports'
+    )
+}
+
+# Add total imports line
+alt_fig_12mo <- alt_fig_12mo %>%
+  add_trace(
+    x = imports_total_12mo$YearMonth[!is.na(imports_total_12mo$Value_12mo)],
+    y = imports_total_12mo$Value_12mo[!is.na(imports_total_12mo$Value_12mo)],
+    name = "Total Imports (12mo acc.)",
+    type = 'scatter',
+    mode = 'lines',
+    line = list(width = 4, color = 'black', dash = 'solid'),
+    showlegend = TRUE
+  ) %>%
+  layout(
+    title = "U.S. Imports by Alternative Product Categories - 12 Month Rolling Sum (Census Basis)",
+    xaxis = list(
+      title = "Source: U.S. Census Bureau",
+      tickformat = "%Y",
+      dtick = "M12",
+      showgrid = TRUE,
+      gridcolor = 'lightgray'
+    ),
+    yaxis = list(
+      title = "Billions USD (12-month acc., NSA)",
+      showgrid = TRUE,
+      gridcolor = 'lightgray'
+    ),
+    hovermode = 'x unified',
+    showlegend = TRUE,
+    legend = list(
+      x = 1.02,
+      y = 0.98,
+      xanchor = "left",
+      yanchor = "top"
+    ),
+    margin = list(b = 80, r = 150),
+    annotations = list(
+      list(
+        x = 1, y = -0.3,
+        text = "Source: U.S. Census Bureau",
+        xref = "paper", yref = "paper",
+        xanchor = "right",
+        showarrow = FALSE,
+        font = list(size = 11, color = "gray")
+      )
+    )
+  )
+alt_fig_12mo
+```
+### Exports by General Aggregation
+```{r exports_alt_category}
+
+# Create exports plot for alternative categories
+alt_exports_data <- alt_monthly_category_data %>%
+  filter(Direction == "Exports") %>%
+  arrange(YearMonth, Category)
+
+# Calculate 12-month rolling sums for exports
+exports_12mo <- alt_exports_data %>%
+  arrange(Category, YearMonth) %>%
+  group_by(Category) %>%
+  mutate(
+    Value_12mo = rollapply(Value_Billions, 
+                           width = 12, 
+                           FUN = sum, 
+                           align = "right", 
+                           fill = NA)
+  ) %>%
+  ungroup()
+
+# Calculate total 12-month rolling sum for exports
+alt_exports_total <- alt_exports_data %>%
+  group_by(YearMonth) %>%
+  summarise(Value_Billions = sum(Value_Billions, na.rm = TRUE))
+
+exports_total_12mo <- alt_exports_total %>%
+  arrange(YearMonth) %>%
+  mutate(
+    Value_12mo = rollapply(Value_Billions, 
+                           width = 12, 
+                           FUN = sum, 
+                           align = "right", 
+                           fill = NA)
+  )
+
+# Get categories for exports (12mo values)
+alt_category_totals_exp_12mo <- exports_12mo %>%
+  filter(!is.na(Value_12mo)) %>%
+  group_by(Category) %>%
+  summarise(Total = sum(Value_12mo, na.rm = TRUE)) %>%
+  arrange(desc(Total))
+
+# Create 12-month rolling exports plot
+alt_fig_exp_12mo <- plot_ly()
+
+# Add traces for each category
+for(i in 1:nrow(alt_category_totals_exp_12mo)) {
+  cat_name <- alt_category_totals_exp_12mo$Category[i]
+  cat_color <- alt_category_colors[cat_name]
+  
+  cat_data <- exports_12mo %>% 
+    filter(Category == cat_name & !is.na(Value_12mo)) %>%
+    arrange(YearMonth)
+  
+  alt_fig_exp_12mo <- alt_fig_exp_12mo %>%
+    add_trace(
+      x = cat_data$YearMonth,
+      y = cat_data$Value_12mo,
+      name = cat_name,
+      type = 'scatter',
+      mode = 'none',
+      fill = 'tonexty',
+      fillcolor = cat_color,
+      line = list(width = 0, color = cat_color),
+      stackgroup = 'exports'
+    )
+}
+
+# Add total exports line
+alt_fig_exp_12mo <- alt_fig_exp_12mo %>%
+  add_trace(
+    x = exports_total_12mo$YearMonth[!is.na(exports_total_12mo$Value_12mo)],
+    y = exports_total_12mo$Value_12mo[!is.na(exports_total_12mo$Value_12mo)],
+    name = "Total Exports (12mo acc.)",
+    type = 'scatter',
+    mode = 'lines',
+    line = list(width = 4, color = 'black', dash = 'solid'),
+    showlegend = TRUE
+  ) %>%
+  layout(
+    title = "U.S. Exports by Alternative Product Categories - 12 Month Rolling Sum (Census Basis)",
+    xaxis = list(
+      title = "Source: U.S. Census Bureau",
+      tickformat = "%Y",
+      dtick = "M12",
+      showgrid = TRUE,
+      gridcolor = 'lightgray'
+    ),
+    yaxis = list(
+      title = "Billions USD (12-month acc., NSA)",
+      showgrid = TRUE,
+      gridcolor = 'lightgray'
+    ),
+    hovermode = 'x unified',
+    showlegend = TRUE,
+    legend = list(
+      x = 1.02,
+      y = 0.98,
+      xanchor = "left",
+      yanchor = "top"
+    ),
+    margin = list(r = 150)
+  )
+alt_fig_exp_12mo
+```
+### Detailed Category Imports
+```{r detailed_category_imports}
+
+# Create detailed mapping with specific overrides
+detailed_hs_categories <- hs_categories
+detailed_hs_categories$Category[detailed_hs_categories$HS2 == "84"] <- "Reactors, boilers, computers etc."
+detailed_hs_categories$Category[detailed_hs_categories$HS2 == "85"] <- "Electrical machinery and parts"
+detailed_hs_categories$Category[detailed_hs_categories$HS2 == "87"] <- "Motor vehicles and parts"
+detailed_hs_categories$Category[detailed_hs_categories$HS2 == "30"] <- "Pharmaceutical products"
+
+# Update the category names as requested
+detailed_hs_categories$Category[detailed_hs_categories$Category == "Chemicals"] <- "Chemicals (ex pharmaceuticals)"
+detailed_hs_categories$Category[detailed_hs_categories$Category == "Mineral Products"] <- "Mineral Products (ex oil)"
+detailed_hs_categories$Category[detailed_hs_categories$Category == "Transportation"] <- "Transportation (ex motor vehicles)"
+# Create detailed full_data with special handling for petroleum
+detailed_full_data <- full_data %>%
+  mutate(
+    Category = case_when(
+      HS_Code %in% c("2709", "2710") ~ "Crude oil and oil fuels",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  left_join(detailed_hs_categories, by = "HS2") %>%
+  mutate(
+    Category = coalesce(Category.x, Category.y)
+  ) %>%
+  select(-Category.x, -Category.y)
+
+# Aggregate by month and detailed category
+detailed_monthly_category_data <- detailed_full_data %>%
+  group_by(YearMonth, Category, Direction) %>%
+  summarise(
+    Value_Billions = sum(Value, na.rm = TRUE) / 1e9,
+    .groups = 'drop'
+  )
+
+# Define color palette for detailed categories
+detailed_category_colors <- c(
+  "Crude oil and oil fuels" = "#000000",
+  "Nuclear appliances" = "#1f77b4",
+  "Electrical machinery and parts" = "#ff7f0e",
+  "Motor vehicles and parts" = "#2ca02c",
+  "Pharmaceutical products" = "#d62728",
+  "Animal & Animal products" = "#8B4513",
+  "Vegetable Products" = "#228B22",
+  "Foodstuffs" = "#FF8C00",
+  "Mineral Products (ex oil)" = "#708090",
+  "Chemicals (ex pharmaceuticals)" = "#4682B4",
+  "Plastics & Rubbers" = "#9370DB",
+  "Raw Hides" = "#D2691E",
+  "Woods" = "#A0522D",
+  "Textiles" = "#DC143C",
+  "Footwear" = "#FF1493",
+  "Stone" = "#A9A9A9",
+  "Metals" = "#4169E1",
+  "Machinery" = "#000080",
+  "Transportation (ex motor vehicles)" = "#006400",
+  "Miscellaneous" = "#FF6347",
+  "Reactors, boilers, computers etc." = "#800080"
+)
+
+# Filter for imports
+detailed_imports_data <- detailed_monthly_category_data %>%
+  filter(Direction == "Imports") %>%
+  arrange(YearMonth, Category)
+
+# Calculate 12-month rolling sums
+detailed_imports_12mo <- detailed_imports_data %>%
+  arrange(Category, YearMonth) %>%
+  group_by(Category) %>%
+  mutate(
+    Value_12mo = rollapply(Value_Billions, 
+                           width = 12, 
+                           FUN = sum, 
+                           align = "right", 
+                           fill = NA)
+  ) %>%
+  ungroup()
+
+# Calculate total 12-month rolling sum
+detailed_imports_total <- detailed_imports_data %>%
+  group_by(YearMonth) %>%
+  summarise(Value_Billions = sum(Value_Billions, na.rm = TRUE))
+
+detailed_imports_total_12mo <- detailed_imports_total %>%
+  arrange(YearMonth) %>%
+  mutate(
+    Value_12mo = rollapply(Value_Billions, 
+                           width = 12, 
+                           FUN = sum, 
+                           align = "right", 
+                           fill = NA)
+  )
+
+# Get categories ordered by total value
+detailed_category_totals_12mo <- detailed_imports_12mo %>%
+  filter(!is.na(Value_12mo)) %>%
+  group_by(Category) %>%
+  summarise(Total = sum(Value_12mo, na.rm = TRUE)) %>%
+  arrange(desc(Total))
+
+# Create 12-month rolling imports plot
+detailed_fig_12mo <- plot_ly()
+
+# Add traces for each category
+for(i in 1:nrow(detailed_category_totals_12mo)) {
+  cat_name <- detailed_category_totals_12mo$Category[i]
+  cat_color <- detailed_category_colors[cat_name]
+  
+  cat_data <- detailed_imports_12mo %>% 
+    filter(Category == cat_name & !is.na(Value_12mo)) %>%
+    arrange(YearMonth)
+  
+  detailed_fig_12mo <- detailed_fig_12mo %>%
+    add_trace(
+      x = cat_data$YearMonth,
+      y = cat_data$Value_12mo,
+      name = cat_name,
+      type = 'scatter',
+      mode = 'none',
+      fill = 'tonexty',
+      fillcolor = cat_color,
+      line = list(width = 0, color = cat_color),
+      stackgroup = 'imports'
+    )
+}
+
+# Add total imports line
+detailed_fig_12mo <- detailed_fig_12mo %>%
+  add_trace(
+    x = detailed_imports_total_12mo$YearMonth[!is.na(detailed_imports_total_12mo$Value_12mo)],
+    y = detailed_imports_total_12mo$Value_12mo[!is.na(detailed_imports_total_12mo$Value_12mo)],
+    name = "Total Imports (12mo acc.)",
+    type = 'scatter',
+    mode = 'lines',
+    line = list(width = 4, color = 'black', dash = 'solid'),
+    showlegend = TRUE
+  ) %>%
+  layout(
+    title = list(
+      text = "U.S. Imports by Detailed Product Categories - 12 Month Rolling Sum (Census Basis)",
+      y = 0.97,
+      x = 0.5,
+      xanchor = "center",
+      yanchor = "top"
+    ),
+    xaxis = list(
+      title = "Source: U.S. Census Bureau",
+      tickformat = "%Y",
+      dtick = "M12",
+      showgrid = TRUE,
+      gridcolor = 'lightgray'
+    ),
+    yaxis = list(
+      title = "Billions USD (12-month acc., NSA)",
+      showgrid = TRUE,
+      gridcolor = 'lightgray'
+    ),
+    hovermode = 'x unified',
+    showlegend = TRUE,
+    legend = list(
+      x = 1.02,
+      y = 0.98,
+      xanchor = "left",
+      yanchor = "top"
+    ),
+    margin = list(b = 80, r = 150),
+    annotations = list(
+      list(
+        x = 1, y = -0.3,
+        text = "Source: U.S. Census Bureau",
+        xref = "paper", yref = "paper",
+        xanchor = "right",
+        showarrow = FALSE,
+        font = list(size = 11, color = "gray")
+      )
+    )
+  )
+detailed_fig_12mo
+```
+### Detailed Category Exports
+```{r detailed_category_exports}
+
+# Create exports plot for detailed categories
+detailed_exports_data <- detailed_monthly_category_data %>%
+  filter(Direction == "Exports") %>%
+  arrange(YearMonth, Category)
+
+# Calculate 12-month rolling sums for exports
+detailed_exports_12mo <- detailed_exports_data %>%
+  arrange(Category, YearMonth) %>%
+  group_by(Category) %>%
+  mutate(
+    Value_12mo = rollapply(Value_Billions, 
+                           width = 12, 
+                           FUN = sum, 
+                           align = "right", 
+                           fill = NA)
+  ) %>%
+  ungroup()
+
+# Calculate total 12-month rolling sum for exports
+detailed_exports_total <- detailed_exports_data %>%
+  group_by(YearMonth) %>%
+  summarise(Value_Billions = sum(Value_Billions, na.rm = TRUE))
+
+detailed_exports_total_12mo <- detailed_exports_total %>%
+  arrange(YearMonth) %>%
+  mutate(
+    Value_12mo = rollapply(Value_Billions, 
+                           width = 12, 
+                           FUN = sum, 
+                           align = "right", 
+                           fill = NA)
+  )
+
+# Get categories for exports (12mo values)
+detailed_category_totals_exp_12mo <- detailed_exports_12mo %>%
+  filter(!is.na(Value_12mo)) %>%
+  group_by(Category) %>%
+  summarise(Total = sum(Value_12mo, na.rm = TRUE)) %>%
+  arrange(desc(Total))
+
+# Create 12-month rolling exports plot
+detailed_fig_exp_12mo <- plot_ly()
+
+# Add traces for each category
+for(i in 1:nrow(detailed_category_totals_exp_12mo)) {
+  cat_name <- detailed_category_totals_exp_12mo$Category[i]
+  cat_color <- detailed_category_colors[cat_name]
+  
+  cat_data <- detailed_exports_12mo %>% 
+    filter(Category == cat_name & !is.na(Value_12mo)) %>%
+    arrange(YearMonth)
+  
+  detailed_fig_exp_12mo <- detailed_fig_exp_12mo %>%
+    add_trace(
+      x = cat_data$YearMonth,
+      y = cat_data$Value_12mo,
+      name = cat_name,
+      type = 'scatter',
+      mode = 'none',
+      fill = 'tonexty',
+      fillcolor = cat_color,
+      line = list(width = 0, color = cat_color),
+      stackgroup = 'exports'
+    )
+}
+
+# Add total exports line
+detailed_fig_exp_12mo <- detailed_fig_exp_12mo %>%
+  add_trace(
+    x = detailed_exports_total_12mo$YearMonth[!is.na(detailed_exports_total_12mo$Value_12mo)],
+    y = detailed_exports_total_12mo$Value_12mo[!is.na(detailed_exports_total_12mo$Value_12mo)],
+    name = "Total Exports (12mo acc.)",
+    type = 'scatter',
+    mode = 'lines',
+    line = list(width = 4, color = 'black', dash = 'solid'),
+    showlegend = TRUE
+  ) %>%
+  layout(
+    title = "U.S. Exports by Detailed Product Categories - 12 Month Rolling Sum (Census Basis)",
+    xaxis = list(
+      title = "Source: U.S. Census Bureau",
+      tickformat = "%Y",
+      dtick = "M12",
+      showgrid = TRUE,
+      gridcolor = 'lightgray'
+    ),
+    yaxis = list(
+      title = "Billions USD (12-month acc., NSA)",
+      showgrid = TRUE,
+      gridcolor = 'lightgray'
+    ),
+    hovermode = 'x unified',
+    showlegend = TRUE,
+    legend = list(
+      x = 1.02,
+      y = 0.98,
+      xanchor = "left",
+      yanchor = "top"
+    ),
+    margin = list(r = 150)
+  )
+detailed_fig_exp_12mo
+```
+
+
+# Extras
+## Product by Country Tables {.tabset}
+
+```{r country_trade_tables}
+# Load required libraries
+# Get current date info
+current_year <- as.numeric(format(Sys.Date(), "%Y"))
+current_month <- as.numeric(format(Sys.Date(), "%m"))
+
+# Function to create trade table for a specific country and direction
+create_country_trade_table <- function(data, country_code, country_name, direction = "exports") {
+  
+  # Determine which value column to use
+  value_col <- if(direction == "exports") "Export_Value" else "Import_Value"
+  
+  # Filter for the latest available month
+  latest_data <- data %>%
+    filter(Country_Code == country_code) %>%
+    filter(!(Year == current_year & Month > current_month)) %>%
+    filter(Year == max(Year)) %>%
+    filter(Month == max(Month))
+  
+  # Get the latest year and month for this country
+  latest_year <- unique(latest_data$Year)[1]
+  latest_month <- unique(latest_data$Month)[1]
+  
+  # Calculate total for the month
+  total_value <- sum(latest_data[[value_col]], na.rm = TRUE)
+  
+  # Get top 10 by HS4 code (4-digit codes)
+  top_10 <- latest_data %>%
+    filter(nchar(HS_Code) == 4) %>%  # Only HS4 codes
+    group_by(HS_Code, Product_Description) %>%
+    summarise(Value = sum(.data[[value_col]], na.rm = TRUE), .groups = 'drop') %>%
+    mutate(
+      Share_Percent = (Value / total_value) * 100,
+      Value_Billions = Value / 1e9
+    ) %>%
+    arrange(desc(Value)) %>%
+    head(10) %>%
+    select(
+      `HS Code` = HS_Code,
+      Description = Product_Description,
+      `Value ($B)` = Value_Billions,
+      `Share (%)` = Share_Percent
+    )
+  
+  # Create the table
+  direction_cap <- if(direction == "exports") "Exports" else "Imports"
+  
+  table <- top_10 %>%
+    kable(format = "html", 
+          digits = c(0, 0, 2, 1),
+          caption = paste0("Top 10 U.S. ", direction_cap, " by HS4 Code - ", 
+                          country_name, " - ", month.name[latest_month], " ", latest_year),
+          align = c('l', 'l', 'r', 'r')) %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                  full_width = FALSE,
+                  font_size = 12) %>%
+    column_spec(1, width = "80px") %>%
+    column_spec(2, width = "400px") %>%
+    column_spec(3, width = "100px", bold = TRUE) %>%
+    column_spec(4, width = "80px") %>%
+    row_spec(0, bold = TRUE, color = "white", background = "#003973") %>%
+    footnote(general = paste0("Total ", direction_cap, ": $", 
+                             round(total_value/1e9, 1), " billion"),
+             general_title = "")
+  
+  return(list(table = table, data = top_10))
+}
+```
+
+
+
+### Canada Exports
+```{r canada_exports}
+canada_exports_table <- create_country_trade_table(
+  countries_products_exp, 
+  country_code = "1220", 
+  country_name = "Canada", 
+  direction = "exports"
+)
+canada_exports_table$table
+```
+
+### Canada Imports
+```{r canada_imports}
+canada_imports_table <- create_country_trade_table(
+  countries_products_imp, 
+  country_code = "1220", 
+  country_name = "Canada", 
+  direction = "imports"
+)
+canada_imports_table$table
+```
+
+### Mexico Exports
+```{r mexico_exports}
+mexico_exports_table <- create_country_trade_table(
+  countries_products_exp, 
+  country_code = "2010", 
+  country_name = "Mexico", 
+  direction = "exports"
+)
+mexico_exports_table$table
+```
+
+### Mexico Imports
+```{r mexico_imports}
+mexico_imports_table <- create_country_trade_table(
+  countries_products_imp, 
+  country_code = "2010", 
+  country_name = "Mexico", 
+  direction = "imports"
+)
+mexico_imports_table$table
+```
+
+### China Exports
+```{r china_exports}
+china_exports_table <- create_country_trade_table(
+  countries_products_exp, 
+  country_code = "5700", 
+  country_name = "China", 
+  direction = "exports"
+)
+china_exports_table$table
+```
+
+### China Imports
+```{r china_imports}
+china_imports_table <- create_country_trade_table(
+  countries_products_imp, 
+  country_code = "5700", 
+  country_name = "China", 
+  direction = "imports"
+)
+china_imports_table$table
+```
+## Country Trajectories {.tabset}
+
+### Mexico Import
+```{r mexico_import_trajectories}
+# Get the top 10 Mexican import HS codes
+mexico_top10_codes <- mexico_imports_table$data$`HS Code`
+
+# Create YearMonth column if it doesn't exist
+countries_products_imp <- countries_products_imp %>%
+  mutate(YearMonth = as.Date(paste(Year, Month, "01", sep = "-")))
+
+# Calculate monthly totals for Mexico
+mexico_monthly_totals <- countries_products_imp %>%
+  filter(Country_Code == "2010") %>%
+  group_by(YearMonth) %>%
+  summarise(Total_Value = sum(Import_Value, na.rm = TRUE), .groups = 'drop')
+
+# Filter and calculate 12-month accumulated shares for top 10 Mexico imports
+mexico_imports_trajectories <- countries_products_imp %>%
+  filter(Country_Code == "2010" & HS_Code %in% mexico_top10_codes) %>%
+  group_by(YearMonth, HS_Code, Product_Description) %>%
+  summarise(Value = sum(Import_Value, na.rm = TRUE), .groups = 'drop') %>%
+  left_join(mexico_monthly_totals, by = "YearMonth") %>%
+  arrange(HS_Code, YearMonth) %>%
+  group_by(HS_Code) %>%
+  mutate(
+    # Calculate 12-month rolling sums
+    Value_12M = zoo::rollsum(Value, k = 12, fill = NA, align = "right"),
+    Total_12M = zoo::rollsum(Total_Value, k = 12, fill = NA, align = "right"),
+    # Calculate share using 12-month accumulated values
+    Share_12M = (Value_12M / Total_12M) * 100
+  ) %>%
+  ungroup() %>%
+  # Remove rows with NA values (first 11 months for each series)
+  filter(!is.na(Share_12M)) %>%
+  arrange(YearMonth, HS_Code)
+
+# Color palette
+hs4_colors <- c("#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00", 
+                "#ffff33", "#a65628", "#f781bf", "#999999", "#66c2a5")
+
+# Create Mexico imports trajectory plot with 12-month accumulated
+mexico_imports_fig <- plot_ly()
+
+for(i in 1:length(mexico_top10_codes)) {
+  hs_code <- mexico_top10_codes[i]
+  hs_data <- mexico_imports_trajectories %>%
+    filter(HS_Code == hs_code) %>%
+    arrange(YearMonth)
+  
+  if(nrow(hs_data) > 0) {
+    # Get description from the table
+    desc <- mexico_imports_table$data$Description[mexico_imports_table$data$`HS Code` == hs_code]
+    label <- paste0(hs_code, " - ", substr(desc, 1, 30))
+    if(nchar(desc) > 30) label <- paste0(label, "...")
+    
+    mexico_imports_fig <- mexico_imports_fig %>%
+      add_trace(
+        x = hs_data$YearMonth,
+        y = hs_data$Share_12M,
+        name = label,
+        type = 'scatter',
+        mode = 'lines',
+        line = list(width = 2.5, color = hs4_colors[i])
+      )
+  }
+}
+
+# Get latest month for title
+latest_mexico <- countries_products_imp %>%
+  filter(Country_Code == "2010") %>%
+  filter(!(Year == current_year & Month > current_month)) %>%
+  summarise(Year = max(Year), Month = max(Month[Year == max(Year)]))
+
+mexico_imports_fig <- mexico_imports_fig %>%
+  layout(
+    xaxis = list(
+      title = "",
+      showgrid = TRUE,
+      gridcolor = 'lightgray'
+    ),
+    yaxis = list(
+      title = "Share of Total U.S. Imports from Mexico - 12-Month Acc. (%)",
+      showgrid = TRUE,
+      gridcolor = 'lightgray',
+      rangemode = "tozero"
+    ),
+    hovermode = 'x unified',
+    showlegend = TRUE,
+    legend = list(
+      x = 1.02,
+      y = 0.98,
+      xanchor = "left",
+      yanchor = "top"
+    ),
+    margin = list(r = 300, b = 80),
+    annotations = list(
+      list(
+        x = 0.5, y = -0.15,
+        text = "Source: U.S. Census Bureau",
+        xref = "paper", yref = "paper",
+        xanchor = "center",
+        showarrow = FALSE,
+        font = list(size = 11, color = "gray")
+      )
+    )
+  )
+
+mexico_imports_fig
+```
+
+### China Import
+```{r china_import_trajectories}
+# Get the top 10 Chinese import HS codes
+china_top10_codes <- china_imports_table$data$`HS Code`
+
+# Calculate monthly totals for China
+china_monthly_totals <- countries_products_imp %>%
+  filter(Country_Code == "5700") %>%
+  group_by(YearMonth) %>%
+  summarise(Total_Value = sum(Import_Value, na.rm = TRUE), .groups = 'drop')
+
+# Filter and calculate 12-month accumulated shares for top 10 China imports
+china_imports_trajectories <- countries_products_imp %>%
+  filter(Country_Code == "5700" & HS_Code %in% china_top10_codes) %>%
+  group_by(YearMonth, HS_Code, Product_Description) %>%
+  summarise(Value = sum(Import_Value, na.rm = TRUE), .groups = 'drop') %>%
+  left_join(china_monthly_totals, by = "YearMonth") %>%
+  arrange(HS_Code, YearMonth) %>%
+  group_by(HS_Code) %>%
+  mutate(
+    # Calculate 12-month rolling sums
+    Value_12M = zoo::rollsum(Value, k = 12, fill = NA, align = "right"),
+    Total_12M = zoo::rollsum(Total_Value, k = 12, fill = NA, align = "right"),
+    # Calculate share using 12-month accumulated values
+    Share_12M = (Value_12M / Total_12M) * 100
+  ) %>%
+  ungroup() %>%
+  # Remove rows with NA values (first 11 months for each series)
+  filter(!is.na(Share_12M)) %>%
+  arrange(YearMonth, HS_Code)
+
+# Color palette
+hs4_colors <- c("#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00", 
+                "#ffff33", "#a65628", "#f781bf", "#999999", "#66c2a5")
+
+# Create China imports trajectory plot with 12-month accumulated
+china_imports_fig <- plot_ly()
+
+for(i in 1:length(china_top10_codes)) {
+  hs_code <- china_top10_codes[i]
+  hs_data <- china_imports_trajectories %>%
+    filter(HS_Code == hs_code) %>%
+    arrange(YearMonth)
+  
+  if(nrow(hs_data) > 0) {
+    # Get description from the table
+    desc <- china_imports_table$data$Description[china_imports_table$data$`HS Code` == hs_code]
+    label <- paste0(hs_code, " - ", substr(desc, 1, 30))
+    if(nchar(desc) > 30) label <- paste0(label, "...")
+    
+    china_imports_fig <- china_imports_fig %>%
+      add_trace(
+        x = hs_data$YearMonth,
+        y = hs_data$Share_12M,
+        name = label,
+        type = 'scatter',
+        mode = 'lines',
+        line = list(width = 2.5, color = hs4_colors[i])
+      )
+  }
+}
+
+# Get latest month for title
+latest_china <- countries_products_imp %>%
+  filter(Country_Code == "5700") %>%
+  filter(!(Year == current_year & Month > current_month)) %>%
+  summarise(Year = max(Year), Month = max(Month[Year == max(Year)]))
+
+china_imports_fig <- china_imports_fig %>%
+  layout(
+    xaxis = list(
+      title = "",
+      showgrid = TRUE,
+      gridcolor = 'lightgray'
+    ),
+    yaxis = list(
+      title = "Share of Total U.S. Imports from China - 12-Month Acc. (%)",
+      showgrid = TRUE,
+      gridcolor = 'lightgray',
+      rangemode = "tozero"
+    ),
+    hovermode = 'x unified',
+    showlegend = TRUE,
+    legend = list(
+      x = 1.02,
+      y = 0.98,
+      xanchor = "left",
+      yanchor = "top"
+    ),
+    margin = list(r = 300, b = 80),
+    annotations = list(
+      list(
+        x = 0.5, y = -0.15,
+        text = "Source: U.S. Census Bureau",
+        xref = "paper", yref = "paper",
+        xanchor = "center",
+        showarrow = FALSE,
+        font = list(size = 11, color = "gray")
+      )
+    )
+  )
+
+china_imports_fig
+```
+
+## Product by HS4 Code Tables {.tabset}
+
+```{r setup_hs_tables}
+# Get current date info
+current_year <- as.numeric(format(Sys.Date(), "%Y"))
+current_month <- as.numeric(format(Sys.Date(), "%m"))
+
+# Function to create trade table for a specific HS code and direction
+create_hs_code_table <- function(data, hs_code, hs_description, direction = "imports") {
+  
+  # Filter for the latest available month and the specific HS code
+  latest_data <- data %>%
+    filter(HS_Code == hs_code & Direction == direction) %>%
+    filter(!(Year == current_year & Month > current_month)) %>%
+    filter(Year == max(Year))
+  
+  # Get the latest month for the latest year
+  latest_data <- latest_data %>%
+    filter(Month == max(Month))
+  
+  # Get the latest year and month
+  latest_year <- unique(latest_data$Year)[1]
+  latest_month <- unique(latest_data$Month)[1]
+  
+  # Filter to keep only countries (exclude regions)
+  # Exclude if:
+  # - Code contains 'X' (like 5XXX, 1XXX)
+  # - Code starts with '0' (like 0026, 0022)
+  # - Code is '-' (total for all countries)
+  country_data <- latest_data %>%
+    filter(!grepl("X", Country_Code)) %>%
+    filter(!grepl("^0", Country_Code)) %>%
+    filter(Country_Code != "-") %>%
+    filter(!grepl("TOTAL FOR ALL COUNTRIES|APEC|OECD|USMCA|NAFTA|EUROPEAN UNION|EURO AREA|NATO|ASEAN|LAFTA|LATIN AMERICAN|PACIFIC RIM", 
+                  Country_Name, ignore.case = TRUE))
+  
+  # For monthly data, we shouldn't need to aggregate - just use the values directly
+  country_totals <- country_data %>%
+    select(Country_Code, Country_Name, Trade_Value) %>%
+    rename(Total_Value = Trade_Value)
+  
+  # Calculate grand total for the month (countries only)
+  grand_total <- sum(country_totals$Total_Value, na.rm = TRUE)
+  
+  # Get top 10 countries
+  top_10 <- country_totals %>%
+    mutate(
+      Share_Percent = (Total_Value / grand_total) * 100,
+      Value_Billions = Total_Value / 1e9
+    ) %>%
+    arrange(desc(Total_Value)) %>%
+    head(10) %>%
+    select(
+      `Country Code` = Country_Code,
+      `Country Name` = Country_Name,
+      `Value ($B)` = Value_Billions,
+      `Share (%)` = Share_Percent
+    )
+  
+  # Create the table
+  direction_cap <- if(direction == "imports") "Import Sources" else "Export Destinations"
+  
+  table <- top_10 %>%
+    kable(format = "html", 
+          digits = c(0, 0, 2, 1),
+          caption = paste0("Top 10 U.S. ", direction_cap, " for HS ", hs_code, 
+                          " - ", hs_description, " (", month.name[latest_month], " ", latest_year, ")"),
+          align = c('l', 'l', 'r', 'r')) %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                  full_width = FALSE,
+                  font_size = 12) %>%
+    column_spec(1, width = "100px") %>%
+    column_spec(2, width = "350px") %>%
+    column_spec(3, width = "100px", bold = TRUE) %>%
+    column_spec(4, width = "80px") %>%
+    row_spec(0, bold = TRUE, color = "white", background = "#003973") %>%
+    footnote(general = paste0("Total ", ifelse(direction == "imports", "Imports", "Exports"), 
+                             ": $", round(grand_total/1e9, 1), " billion"),
+             general_title = "")
+  
+  return(list(table = table, data = top_10, total = grand_total))
+}
+```
+
+### HS 8471 Imports
+```{r hs8471_imports}
+# HS 8471 - AUTOMATIC DATA PROCESSING MACHINES - IMPORTS
+hs8471_imports_table <- create_hs_code_table(
+  products_countries,
+  hs_code = "8471",
+  hs_description = "Automatic Data Processing Machines",
+  direction = "imports"
+)
+hs8471_imports_table$table
+```
+
+### HS 8471 Exports
+```{r hs8471_exports}
+# HS 8471 - AUTOMATIC DATA PROCESSING MACHINES - EXPORTS
+hs8471_exports_table <- create_hs_code_table(
+  products_countries,
+  hs_code = "8471",
+  hs_description = "Automatic Data Processing Machines",
+  direction = "exports"
+)
+hs8471_exports_table$table
+```
+
+### HS 8542 Imports
+```{r hs8542_imports}
+# HS 8542 - ELECTRONIC INTEGRATED CIRCUITS - IMPORTS
+hs8542_imports_table <- create_hs_code_table(
+  products_countries,
+  hs_code = "8542",
+  hs_description = "Electronic Integrated Circuits",
+  direction = "imports"
+)
+hs8542_imports_table$table
+```
+
+### HS 8542 Exports
+```{r hs8542_exports}
+# HS 8542 - ELECTRONIC INTEGRATED CIRCUITS - EXPORTS
+hs8542_exports_table <- create_hs_code_table(
+  products_countries,
+  hs_code = "8542",
+  hs_description = "Electronic Integrated Circuits",
+  direction = "exports"
+)
+hs8542_exports_table$table
+```
+
+### HS 3002 Imports
+```{r hs3002_imports}
+# HS 3002 - HUMAN/ANIMAL BLOOD; VACCINES - IMPORTS
+hs3002_imports_table <- create_hs_code_table(
+  products_countries,
+  hs_code = "3002",
+  hs_description = "Human/Animal Blood; Vaccines",
+  direction = "imports"
+)
+hs3002_imports_table$table
+```
+
+#### HS 3002 Exports
+```{r hs3002_exports}
+# HS 3002 - HUMAN/ANIMAL BLOOD; VACCINES - EXPORTS
+hs3002_exports_table <- create_hs_code_table(
+  products_countries,
+  hs_code = "3002",
+  hs_description = "Human/Animal Blood; Vaccines",
+  direction = "exports"
+)
+hs3002_exports_table$table
+```
+
+## HS4 Product Trajectories {.tabset}
+
+### HS 8542 Imports
+```{r hs8542_import_trajectories}
+# HS 8542 - ELECTRONIC INTEGRATED CIRCUITS - IMPORT TRAJECTORIES
+
+# Get top 10 importing countries for HS 8542
+top10_8542_importers <- hs8542_imports_table$data$`Country Code`
+
+# Create YearMonth column if needed
+products_countries <- products_countries %>%
+  mutate(YearMonth = as.Date(paste(Year, Month, "01", sep = "-")))
+
+# Calculate monthly totals for HS 8542 imports
+hs8542_monthly_totals <- products_countries %>%
+  filter(HS_Code == "8542" & Direction == "imports") %>%
+  filter(!grepl("X", Country_Code) & !grepl("^0", Country_Code) & Country_Code != "-") %>%
+  group_by(YearMonth) %>%
+  summarise(Total_Value = sum(Trade_Value, na.rm = TRUE), .groups = 'drop')
+
+# Filter and calculate 12-month accumulated shares for top 10 HS 8542 importers
+hs8542_import_trajectories <- products_countries %>%
+  filter(HS_Code == "8542" & Direction == "imports" & Country_Code %in% top10_8542_importers) %>%
+  group_by(YearMonth, Country_Code, Country_Name) %>%
+  summarise(Value = sum(Trade_Value, na.rm = TRUE), .groups = 'drop') %>%
+  left_join(hs8542_monthly_totals, by = "YearMonth") %>%
+  arrange(Country_Code, YearMonth) %>%
+  group_by(Country_Code) %>%
+  mutate(
+    # Calculate 12-month rolling sums
+    Value_12M = zoo::rollsum(Value, k = 12, fill = NA, align = "right"),
+    Total_12M = zoo::rollsum(Total_Value, k = 12, fill = NA, align = "right"),
+    # Calculate share using 12-month accumulated values
+    Share_12M = (Value_12M / Total_12M) * 100
+  ) %>%
+  ungroup() %>%
+  filter(!is.na(Share_12M)) %>%
+  arrange(YearMonth, Country_Code)
+
+# Color palette
+hs_colors <- c("#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00", 
+               "#ffff33", "#a65628", "#f781bf", "#999999", "#66c2a5")
+
+# Create HS 8542 imports trajectory plot
+hs8542_imports_fig <- plot_ly()
+
+for(i in 1:length(top10_8542_importers)) {
+  country_code <- top10_8542_importers[i]
+  country_data <- hs8542_import_trajectories %>%
+    filter(Country_Code == country_code) %>%
+    arrange(YearMonth)
+  
+  if(nrow(country_data) > 0) {
+    country_name <- unique(country_data$Country_Name)[1]
+    label <- paste0(country_code, " - ", country_name)
+    
+    hs8542_imports_fig <- hs8542_imports_fig %>%
+      add_trace(
+        x = country_data$YearMonth,
+        y = country_data$Share_12M,
+        name = label,
+        type = 'scatter',
+        mode = 'lines',
+        line = list(width = 2.5, color = hs_colors[i])
+      )
+  }
+}
+
+hs8542_imports_fig <- hs8542_imports_fig %>%
+  layout(
+    xaxis = list(
+      title = "",
+      showgrid = TRUE,
+      gridcolor = 'lightgray'
+    ),
+    yaxis = list(
+      title = "Share of HS 8542 Imports - 12-Month Acc. (%)",
+      showgrid = TRUE,
+      gridcolor = 'lightgray',
+      rangemode = "tozero"
+    ),
+    hovermode = 'x unified',
+    showlegend = TRUE,
+    legend = list(
+      x = 1.02,
+      y = 0.98,
+      xanchor = "left",
+      yanchor = "top"
+    ),
+    margin = list(r = 300, b = 80),
+    annotations = list(
+      list(
+        x = 0.5, y = -0.15,
+        text = "Source: U.S. Census Bureau",
+        xref = "paper", yref = "paper",
+        xanchor = "center",
+        showarrow = FALSE,
+        font = list(size = 11, color = "gray")
+      )
+    )
+  )
+
+hs8542_imports_fig
+```
+
+### HS 8542 Exports
+```{r hs8542_export_trajectories}
+# HS 8542 - ELECTRONIC INTEGRATED CIRCUITS - EXPORT TRAJECTORIES
+
+# Get top 10 export destinations for HS 8542
+top10_8542_exporters <- hs8542_exports_table$data$`Country Code`
+
+# Calculate monthly totals for HS 8542 exports
+hs8542_export_monthly_totals <- products_countries %>%
+  filter(HS_Code == "8542" & Direction == "exports") %>%
+  filter(!grepl("X", Country_Code) & !grepl("^0", Country_Code) & Country_Code != "-") %>%
+  group_by(YearMonth) %>%
+  summarise(Total_Value = sum(Trade_Value, na.rm = TRUE), .groups = 'drop')
+
+# Filter and calculate 12-month accumulated shares for top 10 HS 8542 export destinations
+hs8542_export_trajectories <- products_countries %>%
+  filter(HS_Code == "8542" & Direction == "exports" & Country_Code %in% top10_8542_exporters) %>%
+  group_by(YearMonth, Country_Code, Country_Name) %>%
+  summarise(Value = sum(Trade_Value, na.rm = TRUE), .groups = 'drop') %>%
+  left_join(hs8542_export_monthly_totals, by = "YearMonth") %>%
+  arrange(Country_Code, YearMonth) %>%
+  group_by(Country_Code) %>%
+  mutate(
+    # Calculate 12-month rolling sums
+    Value_12M = zoo::rollsum(Value, k = 12, fill = NA, align = "right"),
+    Total_12M = zoo::rollsum(Total_Value, k = 12, fill = NA, align = "right"),
+    # Calculate share using 12-month accumulated values
+    Share_12M = (Value_12M / Total_12M) * 100
+  ) %>%
+  ungroup() %>%
+  filter(!is.na(Share_12M)) %>%
+  arrange(YearMonth, Country_Code)
+
+# Create HS 8542 exports trajectory plot
+hs8542_exports_fig <- plot_ly()
+
+for(i in 1:length(top10_8542_exporters)) {
+  country_code <- top10_8542_exporters[i]
+  country_data <- hs8542_export_trajectories %>%
+    filter(Country_Code == country_code) %>%
+    arrange(YearMonth)
+  
+  if(nrow(country_data) > 0) {
+    country_name <- unique(country_data$Country_Name)[1]
+    label <- paste0(country_code, " - ", country_name)
+    
+    hs8542_exports_fig <- hs8542_exports_fig %>%
+      add_trace(
+        x = country_data$YearMonth,
+        y = country_data$Share_12M,
+        name = label,
+        type = 'scatter',
+        mode = 'lines',
+        line = list(width = 2.5, color = hs_colors[i])
+      )
+  }
+}
+
+hs8542_exports_fig <- hs8542_exports_fig %>%
+  layout(
+    xaxis = list(
+      title = "",
+      showgrid = TRUE,
+      gridcolor = 'lightgray'
+    ),
+    yaxis = list(
+      title = "Share of HS 8542 Exports - 12-Month Acc. (%)",
+      showgrid = TRUE,
+      gridcolor = 'lightgray',
+      rangemode = "tozero"
+    ),
+    hovermode = 'x unified',
+    showlegend = TRUE,
+    legend = list(
+      x = 1.02,
+      y = 0.98,
+      xanchor = "left",
+      yanchor = "top"
+    ),
+    margin = list(r = 300, b = 80),
+    annotations = list(
+      list(
+        x = 0.5, y = -0.15,
+        text = "Source: U.S. Census Bureau",
+        xref = "paper", yref = "paper",
+        xanchor = "center",
+        showarrow = FALSE,
+        font = list(size = 11, color = "gray")
+      )
+    )
+  )
+
+hs8542_exports_fig
+```
+
+### HS 3002 Imports
+```{r hs3002_import_trajectories}
+# HS 3002 - HUMAN/ANIMAL BLOOD; VACCINES - IMPORT TRAJECTORIES
+
+# Get top 10 importing countries for HS 3002
+top10_3002_importers <- hs3002_imports_table$data$`Country Code`
+
+# Calculate monthly totals for HS 3002 imports
+hs3002_monthly_totals <- products_countries %>%
+  filter(HS_Code == "3002" & Direction == "imports") %>%
+  filter(!grepl("X", Country_Code) & !grepl("^0", Country_Code) & Country_Code != "-") %>%
+  group_by(YearMonth) %>%
+  summarise(Total_Value = sum(Trade_Value, na.rm = TRUE), .groups = 'drop')
+
+# Filter and calculate 12-month accumulated shares for top 10 HS 3002 importers
+hs3002_import_trajectories <- products_countries %>%
+  filter(HS_Code == "3002" & Direction == "imports" & Country_Code %in% top10_3002_importers) %>%
+  group_by(YearMonth, Country_Code, Country_Name) %>%
+  summarise(Value = sum(Trade_Value, na.rm = TRUE), .groups = 'drop') %>%
+  left_join(hs3002_monthly_totals, by = "YearMonth") %>%
+  arrange(Country_Code, YearMonth) %>%
+  group_by(Country_Code) %>%
+  mutate(
+    # Calculate 12-month rolling sums
+    Value_12M = zoo::rollsum(Value, k = 12, fill = NA, align = "right"),
+    Total_12M = zoo::rollsum(Total_Value, k = 12, fill = NA, align = "right"),
+    # Calculate share using 12-month accumulated values
+    Share_12M = (Value_12M / Total_12M) * 100
+  ) %>%
+  ungroup() %>%
+  filter(!is.na(Share_12M)) %>%
+  arrange(YearMonth, Country_Code)
+
+# Create HS 3002 imports trajectory plot
+hs3002_imports_fig <- plot_ly()
+
+for(i in 1:length(top10_3002_importers)) {
+  country_code <- top10_3002_importers[i]
+  country_data <- hs3002_import_trajectories %>%
+    filter(Country_Code == country_code) %>%
+    arrange(YearMonth)
+  
+  if(nrow(country_data) > 0) {
+    country_name <- unique(country_data$Country_Name)[1]
+    label <- paste0(country_code, " - ", country_name)
+    
+    hs3002_imports_fig <- hs3002_imports_fig %>%
+      add_trace(
+        x = country_data$YearMonth,
+        y = country_data$Share_12M,
+        name = label,
+        type = 'scatter',
+        mode = 'lines',
+        line = list(width = 2.5, color = hs_colors[i])
+      )
+  }
+}
+
+hs3002_imports_fig <- hs3002_imports_fig %>%
+  layout(
+    xaxis = list(
+      title = "",
+      showgrid = TRUE,
+      gridcolor = 'lightgray'
+    ),
+    yaxis = list(
+      title = "Share of HS 3002 Imports - 12-Month Acc. (%)",
+      showgrid = TRUE,
+      gridcolor = 'lightgray',
+      rangemode = "tozero"
+    ),
+    hovermode = 'x unified',
+    showlegend = TRUE,
+    legend = list(
+      x = 1.02,
+      y = 0.98,
+      xanchor = "left",
+      yanchor = "top"
+    ),
+    margin = list(r = 300, b = 80),
+    annotations = list(
+      list(
+        x = 0.5, y = -0.15,
+        text = "Source: U.S. Census Bureau",
+        xref = "paper", yref = "paper",
+        xanchor = "center",
+        showarrow = FALSE,
+        font = list(size = 11, color = "gray")
+      )
+    )
+  )
+
+hs3002_imports_fig
+```
+<center>*This report was automatically generated using R Markdown. For questions or updates, please contact the Trade Analysis Team.*</center>
